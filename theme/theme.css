@@ -1,0 +1,735 @@
+/*
+ * Antigravity Custom Theme — Pure CSS Stylesheet
+ * Cosmetic-only theme layer loaded into local Hub WebContentsView.
+ * No external @import or remote URLs; wallpaper URL comes strictly from --agy-bg-image.
+ *
+ * ============================================================================
+ * ISOLATION BOUNDARIES (AREAS OUTER CSS CANNOT PENETRATE)
+ * ============================================================================
+ * 1. Shadow DOM boundaries:
+ *    - <safevalues-with-css> (attachShadow({ mode: "closed" }))
+ *    - <safe-content-frame> (attachShadow({ mode: "open" }) -> <iframe part="shim-iframe">)
+ *    - Element highlight overlay <div> (attachShadow({ mode: "closed" }))
+ * 2. <iframe> boundaries:
+ *    - [data-testid="browser-iframe"]
+ *    - Sandboxed HTML/canvas iframes (sandbox="allow-scripts")
+ *    - MCP App iframe
+ *    - [data-testid="sidecar-iframe"] (plugin://)
+ *    - SafeContentFrame shimIframe and hidden helper iframe
+ * 3. Separate WebContentsView / <webview> processes:
+ *    - browserWcv (native Chromium view punched through via [data-browser-hole])
+ *    - curtainView & loadingOverlay (dist/utils.js, dist/loadingOverlay.js)
+ *    - Guest <webview> (separate partition; excluded from Hub preload & agy-theme://)
+ * ============================================================================
+ */
+
+:root {
+  --agy-theme-enabled: 0;
+  --agy-bg-image: none;
+  --agy-bg-dim: 0.35;
+  --agy-bg-blur: 0px;
+  --agy-sidebar-opacity: 0.55;
+  --agy-sidebar-blur: 14px;
+  --agy-composer-opacity: 0.55;
+  --agy-composer-blur: 16px;
+  --agy-panel-opacity: 0.72;
+  --agy-panel-blur: 14px;
+  --agy-browser-hole-clip: none;
+}
+
+/* ============================================================================
+ * 1. FULL-APP WALLPAPER LAYER & BROWSER HOLE SAFETY
+ * ============================================================================ */
+
+html:not([data-agy-theme-enabled="true"]) #agy-custom-wallpaper-layer {
+  display: none !important;
+}
+
+html[data-agy-theme-enabled="true"] #agy-custom-wallpaper-layer {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 0 !important;
+  pointer-events: none !important;
+  overflow: hidden !important;
+  clip-path: var(--agy-browser-hole-clip, none);
+}
+
+html[data-agy-theme-enabled="true"] #agy-custom-wallpaper-layer .agy-custom-wallpaper-img {
+  position: absolute !important;
+  top: calc(var(--agy-bg-blur, 0px) * -2);
+  left: calc(var(--agy-bg-blur, 0px) * -2);
+  width: calc(100% + var(--agy-bg-blur, 0px) * 4);
+  height: calc(100% + var(--agy-bg-blur, 0px) * 4);
+  max-width: none !important;
+  max-height: none !important;
+  object-fit: cover !important;
+  object-position: center !important;
+  filter: blur(var(--agy-bg-blur, 0px));
+  transform: translateZ(0);
+  pointer-events: none !important;
+  user-select: none !important;
+}
+
+html[data-agy-theme-enabled="true"] #agy-custom-wallpaper-layer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background-color: rgb(0 0 0 / var(--agy-bg-dim, 0.35));
+}
+
+html[data-agy-theme-enabled="true"][data-agy-has-wallpaper="false"] #agy-custom-wallpaper-layer::after {
+  background-color: transparent;
+}
+
+/* Fallback: if browserWcv hole is open and JS clip-path is not active, hide wallpaper layer */
+html[data-agy-theme-enabled="true"]:not([data-agy-hole-clipped="true"]) body[data-has-browser-hole="true"] #agy-custom-wallpaper-layer {
+  display: none !important;
+}
+
+/* Never paint or blur over [data-browser-hole] or its transparent ancestors */
+html[data-agy-theme-enabled="true"] body[data-has-browser-hole="true"],
+html[data-agy-theme-enabled="true"] .theme-standalone[data-has-browser-hole="true"],
+html[data-agy-theme-enabled="true"] .browser-hole-ancestor[data-has-browser-hole="true"],
+html[data-agy-theme-enabled="true"] [data-main-content-body][data-has-browser-hole="true"],
+html[data-agy-theme-enabled="true"] [data-side-panel-body][data-has-browser-hole="true"],
+html[data-agy-theme-enabled="true"] [data-tiling-pane][data-has-browser-hole="true"],
+html[data-agy-theme-enabled="true"] [data-pane-id][data-has-browser-hole="true"],
+html[data-agy-theme-enabled="true"] [data-browser-hole]:not([data-browser-hole="false"]) {
+  background-color: transparent !important;
+  background-image: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+/* ============================================================================
+ * 2. ENABLED THEME ROOT TRANSPARENCY & CONTRAST TOKENS
+ * Keep html inline theme tokens (--background, --sidebar, etc.) intact so
+ * installHubSurfaceThemeAutoSync & titleBarOverlay continue reading opaque hex.
+ * Override --color-* Tailwind tokens and derived surfaces on body without cycles.
+ * ============================================================================ */
+
+html[data-agy-theme-enabled="true"],
+html[data-agy-theme-enabled="true"] body,
+html[data-agy-theme-enabled="true"] #root,
+html[data-agy-theme-enabled="true"] .theme-standalone:not([data-has-browser-hole="true"]) {
+  background-color: transparent !important;
+}
+
+html[data-agy-theme-enabled="true"] #root {
+  position: relative;
+  z-index: 1;
+}
+
+html[data-agy-theme-enabled="true"] body,
+html[data-agy-theme-enabled="true"] body .theme-standalone {
+  --agy-alpha-shell: calc(var(--agy-panel-opacity, 0.72) * 45%);
+  --agy-alpha-panel: calc(var(--agy-panel-opacity, 0.72) * 85%);
+  --agy-alpha-sidebar: calc(var(--agy-sidebar-opacity, var(--agy-panel-opacity, 0.55)) * 88%);
+  --agy-alpha-card: calc(var(--agy-panel-opacity, 0.72) * 78%);
+  --agy-alpha-elevated: calc(var(--agy-composer-opacity, var(--agy-panel-opacity, 0.55)) * 92%);
+  --agy-alpha-overlay: clamp(38%, calc(var(--agy-panel-opacity, 0.72) * 108%), 96%);
+  --agy-alpha-subtle: calc(var(--agy-panel-opacity, 0.72) * 60%);
+
+  --agy-surface-shell: color-mix(in srgb, var(--shell) var(--agy-alpha-shell), transparent);
+  --agy-surface-bg: color-mix(in srgb, var(--background) var(--agy-alpha-panel), transparent);
+  --agy-surface-sidebar: color-mix(in srgb, var(--sidebar) var(--agy-alpha-sidebar), transparent);
+  --agy-surface-card: color-mix(in srgb, var(--card) var(--agy-alpha-card), transparent);
+  --agy-surface-muted: color-mix(in srgb, var(--muted) var(--agy-alpha-subtle), transparent);
+  --agy-surface-composer: color-mix(in srgb, var(--glass) var(--agy-alpha-elevated), transparent);
+  --agy-surface-overlay: color-mix(in srgb, var(--card) var(--agy-alpha-overlay), transparent);
+
+  --agy-glass-border: color-mix(in srgb, var(--foreground) 13%, var(--border));
+  --agy-glass-border-strong: color-mix(in srgb, var(--foreground) 22%, var(--border));
+
+  --color-background: var(--agy-surface-bg);
+  --color-sidebar: var(--agy-surface-bg);
+  --color-card: var(--agy-surface-card);
+  --color-muted: var(--agy-surface-muted);
+  --color-secondary: color-mix(in srgb, var(--secondary) 80%, transparent);
+  --color-border: var(--agy-glass-border);
+  --color-card-border: var(--agy-glass-border);
+  --color-sidebar-secondary: color-mix(in srgb, var(--sidebar-secondary) 82%, transparent);
+  --color-sidebar-muted: color-mix(in srgb, var(--sidebar-muted) 68%, transparent);
+
+  /* Nudge muted/secondary text slightly toward foreground for crisp legibility on glass */
+  --color-secondary-foreground: color-mix(in srgb, var(--secondary-foreground) 78%, var(--foreground));
+  --color-muted-foreground: color-mix(in srgb, var(--muted-foreground) 70%, var(--foreground));
+}
+
+/* ============================================================================
+ * 3. APP SHELL, INSET SHEET, HEADER / TITLEBAR, LEFT SIDEBAR
+ * Keep shell & main chat background fully transparent so wallpaper renders at
+ * true brightness; apply panel opacity & backdrop-filter blur strictly to
+ * floating/side panels (left sidebar, side panel, prompt composer, cards, modals).
+ * ============================================================================ */
+
+html[data-agy-theme-enabled="true"] body .agy-shell:not([data-has-browser-hole="true"]) {
+  background-color: transparent !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+html[data-agy-theme-enabled="true"] body .agy-inset-shell {
+  --shell-canvas: transparent;
+  --card-edge: var(--agy-glass-border);
+  background-color: transparent !important;
+}
+
+html[data-agy-theme-enabled="true"] body .agy-sheet:not([data-sheet-inset]):not([data-has-browser-hole="true"]) {
+  background-color: transparent !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+html[data-agy-theme-enabled="true"] body .agy-sheet[data-sheet-inset] {
+  background-color: transparent !important;
+}
+
+/* Header & Titlebar */
+html[data-agy-theme-enabled="true"] body .agy-titlebar:not(.bg-sidebar):not([data-has-browser-hole="true"]),
+html[data-agy-theme-enabled="true"] body .agy-sheet:not([data-sheet-inset]) .agy-titlebar.bg-sidebar:not([data-has-browser-hole="true"]),
+html[data-agy-theme-enabled="true"] body .agy-sheet:not([data-sheet-inset]) [data-main-content-header]:not([data-has-browser-hole="true"]),
+html[data-agy-theme-enabled="true"] body [data-main-content-header]:not([data-has-browser-hole="true"]),
+html[data-agy-theme-enabled="true"] body [data-side-panel-header]:not([data-has-browser-hole="true"]) {
+  background-color: color-mix(in srgb, var(--shell) calc(var(--agy-panel-opacity, 0.72) * 32%), transparent) !important;
+  -webkit-backdrop-filter: blur(calc(var(--agy-panel-blur, 14px) * 0.5));
+  backdrop-filter: blur(calc(var(--agy-panel-blur, 14px) * 0.5));
+  border-bottom: 1px solid var(--agy-glass-border);
+}
+
+html[data-agy-theme-enabled="true"] body [data-split-panes] .agy-sheet[data-sheet-inset] [data-tiling-pane]:not([data-has-browser-hole="true"]) [data-testid="pane-titlebar-toolbar"] {
+  --background: transparent;
+  --color-background: transparent;
+  background-color: color-mix(in srgb, var(--shell) calc(var(--agy-panel-opacity, 0.72) * 32%), transparent) !important;
+  -webkit-backdrop-filter: blur(calc(var(--agy-panel-blur, 14px) * 0.5));
+  backdrop-filter: blur(calc(var(--agy-panel-blur, 14px) * 0.5));
+}
+
+/* Left Sidebar & Peek Drawer (Glass Panel — Independent Controls) */
+html[data-agy-theme-enabled="true"] body [data-testid="sidebar-split"] {
+  background-color: transparent !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  border: none !important;
+}
+
+html[data-agy-theme-enabled="true"] body [role="navigation"][aria-label="Sidebar"]:not([data-has-browser-hole="true"]) {
+  background-color: var(--agy-surface-sidebar) !important;
+  --color-sidebar: transparent;
+  --sidebar: transparent;
+  -webkit-backdrop-filter: blur(var(--agy-sidebar-blur, 14px)) !important;
+  backdrop-filter: blur(var(--agy-sidebar-blur, 14px)) !important;
+  border-right: 1px solid var(--agy-glass-border);
+}
+
+html[data-agy-theme-enabled="true"] body .agy-inset-shell [data-peek-surface="open"] > * {
+  background-color: var(--agy-surface-sidebar) !important;
+  -webkit-backdrop-filter: blur(var(--agy-sidebar-blur, 14px)) saturate(1.3) !important;
+  backdrop-filter: blur(var(--agy-sidebar-blur, 14px)) saturate(1.3) !important;
+}
+
+html[data-agy-theme-enabled="true"] body [data-testid="sidebar-popover-backdrop"] {
+  background-color: rgb(0 0 0 / 0.35);
+}
+
+html[data-agy-theme-enabled="true"] body [data-testid="sidebar-popover-backdrop"] + .surface-opaque[role="dialog"] {
+  background-color: var(--agy-surface-sidebar) !important;
+  -webkit-backdrop-filter: blur(var(--agy-sidebar-blur, 14px)) saturate(1.3) !important;
+  backdrop-filter: blur(var(--agy-sidebar-blur, 14px)) saturate(1.3) !important;
+  border: 1px solid var(--agy-glass-border);
+}
+
+html[data-agy-theme-enabled="true"] body[data-agy-theme] .agy-sidebar-row.agy-sidebar-row[data-selected="true"],
+html[data-agy-theme-enabled="true"] body .agy-sidebar-row.agy-sidebar-row[data-selected="true"] {
+  background-color: color-mix(in srgb, var(--sidebar-secondary) clamp(14%, calc(var(--agy-sidebar-opacity, var(--agy-panel-opacity, 0.55)) * 78%), 80%), transparent) !important;
+  --row-bg: transparent !important;
+  box-shadow: inset 0 0 0 1px var(--agy-glass-border-strong) !important;
+}
+
+html[data-agy-theme-enabled="true"] body[data-agy-theme] .agy-sidebar-row.agy-sidebar-row:hover:not([data-selected="true"]),
+html[data-agy-theme-enabled="true"] body .agy-sidebar-row:hover:not([data-selected="true"]) {
+  background-color: color-mix(in srgb, var(--sidebar-muted) clamp(8%, calc(var(--agy-sidebar-opacity, var(--agy-panel-opacity, 0.55)) * 58%), 68%), transparent) !important;
+  --row-bg: transparent !important;
+}
+
+html[data-agy-theme-enabled="true"] body .agy-sidebar-row .agy-row-actions::before,
+html[data-agy-theme-enabled="true"] body [data-testid="conversation-row-history"] .agy-row-actions::before {
+  background: transparent !important;
+}
+
+html[data-agy-theme-enabled="true"] body .agy-status-overflow,
+html[data-agy-theme-enabled="true"] body [data-testid="conversation-row-history"] .agy-status-overflow {
+  background: var(--agy-surface-overlay);
+  box-shadow: 0 0 0 1px var(--agy-glass-border) !important;
+}
+
+/* ============================================================================
+ * 4. CHAT CANVAS, TILING PANES, GREETING SCREEN, CARDS, TERMINAL & EDITOR
+ * ============================================================================ */
+
+html[data-agy-theme-enabled="true"] body .agy-sheet[data-sheet-inset] [data-main-content-body]:not([data-has-browser-hole="true"]) {
+  background-color: transparent !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+html[data-agy-theme-enabled="true"] body [data-split-panes] .agy-sheet[data-sheet-inset] [data-main-content-body] {
+  background-color: transparent !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+html[data-agy-theme-enabled="true"] body [data-split-panes] .agy-sheet[data-sheet-inset] [data-tiling-pane]:not([data-has-browser-hole="true"]) {
+  background-color: transparent !important;
+  background-image: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+html[data-agy-theme-enabled="true"] body [data-testid="sidecar-iframe-slot"],
+html[data-agy-theme-enabled="true"] body [data-hoisted-slot-rim],
+html[data-agy-theme-enabled="true"] body [data-testid="sidecar-iframe"] {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+html[data-agy-theme-enabled="true"] body [data-testid="sidecar-iframe"] {
+  color-scheme: inherit;
+}
+
+html[data-agy-theme-enabled="true"] body [data-testid="conversation-view"] {
+  background-color: transparent !important;
+}
+
+html[data-agy-theme-enabled="true"] body [data-testid="conversation-view"] .bg-gradient-to-t {
+  background-image: none !important;
+  background-color: transparent !important;
+}
+
+/* Greeting Screen & Floating Chat Controls */
+html[data-agy-theme-enabled="true"] body .agy-home {
+  background-color: transparent;
+}
+
+html[data-agy-theme-enabled="true"] body .agy-tip-card,
+html[data-agy-theme-enabled="true"] body .agy-pill.surface-opaque,
+html[data-agy-theme-enabled="true"] body .agy-scroll-bottom {
+  background-color: var(--agy-surface-card);
+  border: 1px solid var(--agy-glass-border);
+  -webkit-backdrop-filter: blur(var(--agy-panel-blur, 14px)) saturate(1.3);
+  backdrop-filter: blur(var(--agy-panel-blur, 14px)) saturate(1.3);
+}
+
+/* Assistant & Message Cards */
+html[data-agy-theme-enabled="true"] body .agy-card,
+html[data-agy-theme-enabled="true"] body .agy-callout,
+html[data-agy-theme-enabled="true"] body .artifact-card,
+html[data-agy-theme-enabled="true"] body .agy-md-table,
+html[data-agy-theme-enabled="true"] body .agy-selection-pill {
+  background-color: var(--agy-surface-card);
+  border-color: var(--agy-glass-border);
+  -webkit-backdrop-filter: blur(var(--agy-panel-blur, 14px)) saturate(1.25);
+  backdrop-filter: blur(var(--agy-panel-blur, 14px)) saturate(1.25);
+}
+
+html[data-agy-theme-enabled="true"] body .artifact-card:hover:not(:has(.proceed-button:hover)) {
+  background-color: color-mix(in srgb, var(--secondary) 68%, transparent);
+}
+
+html[data-agy-theme-enabled="true"] body .code-block,
+html[data-agy-theme-enabled="true"] body [data-testid="planner-response-text"] pre,
+html[data-agy-theme-enabled="true"] body [data-testid="progress-update-response-text"] pre {
+  background-color: color-mix(in srgb, var(--muted) 76%, transparent);
+  border: 1px solid var(--agy-glass-border);
+}
+
+/* Auxiliary Side Panel & Drawers (e.g., Swarm / Right Panel) */
+html[data-agy-theme-enabled="true"] body [data-side-panel]:not([data-has-browser-hole="true"]) {
+  background-color: transparent !important;
+  border-left: 1px solid var(--agy-glass-border);
+}
+
+html[data-agy-theme-enabled="true"] body [data-side-panel-body]:not([data-has-browser-hole="true"]),
+html[data-agy-theme-enabled="true"] body .agy-inset-shell [data-side-panel-body]:not([data-has-browser-hole="true"]) {
+  background-color: var(--agy-surface-bg) !important;
+}
+
+html[data-agy-theme-enabled="true"] body [data-side-panel-body]:not([data-has-browser-hole="true"]) > div:not([data-browser-hole]):not([data-has-browser-hole="true"]),
+html[data-agy-theme-enabled="true"] body [data-side-panel-body]:not([data-has-browser-hole="true"]) .bg-background:not([data-browser-hole]),
+html[data-agy-theme-enabled="true"] body [data-side-panel-body]:not([data-has-browser-hole="true"]) .bg-sidebar:not([data-browser-hole]),
+html[data-agy-theme-enabled="true"] body [data-side-panel-body]:not([data-has-browser-hole="true"]) .bg-card:not([data-browser-hole]),
+html[data-agy-theme-enabled="true"] body [data-side-panel-body]:not([data-has-browser-hole="true"]) .surface-opaque:not([data-browser-hole]):not([data-has-browser-hole="true"]),
+html[data-agy-theme-enabled="true"] body [data-side-panel-body]:not([data-has-browser-hole="true"]) *:has(> [data-testid="sidecar-iframe"]),
+html[data-agy-theme-enabled="true"] body [data-side-panel-body]:not([data-has-browser-hole="true"]) *:has(> * > [data-testid="sidecar-iframe"]),
+html[data-agy-theme-enabled="true"] body [data-tiling-pane]:not([data-has-browser-hole="true"]) > .bg-background:not([data-browser-hole]),
+html[data-agy-theme-enabled="true"] body [data-tiling-pane]:not([data-has-browser-hole="true"]) > div > .bg-background:not([data-browser-hole]),
+html[data-agy-theme-enabled="true"] body [data-tiling-pane]:not([data-has-browser-hole="true"]) .surface-opaque:not([data-browser-hole]):not([data-has-browser-hole="true"]),
+html[data-agy-theme-enabled="true"] body [data-tiling-pane]:not([data-has-browser-hole="true"]) *:has(> [data-testid="sidecar-iframe"]),
+html[data-agy-theme-enabled="true"] body [data-tiling-pane]:not([data-has-browser-hole="true"]) *:has(> * > [data-testid="sidecar-iframe"]) {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+}
+
+html[data-agy-theme-enabled="true"] body [data-side-panel-body]:not([data-has-browser-hole="true"]):not(:has(.monaco-editor)),
+html[data-agy-theme-enabled="true"] body .agy-inset-shell [data-side-panel-body]:not([data-has-browser-hole="true"]):not(:has(.monaco-editor)) {
+  -webkit-backdrop-filter: blur(var(--agy-panel-blur, 14px));
+  backdrop-filter: blur(var(--agy-panel-blur, 14px));
+}
+
+html[data-agy-theme-enabled="true"] body .aux-drawer-backdrop {
+  background-color: rgb(0 0 0 / 0.38);
+}
+
+html[data-agy-theme-enabled="true"] body .aux-drawer-popup {
+  background-color: var(--agy-surface-overlay);
+  border-top: 1px solid var(--agy-glass-border);
+  -webkit-backdrop-filter: blur(calc(var(--agy-panel-blur, 14px) + 4px)) saturate(1.35);
+  backdrop-filter: blur(calc(var(--agy-panel-blur, 14px) + 4px)) saturate(1.35);
+}
+
+/* Bottom Terminal & Monaco Editor */
+html[data-agy-theme-enabled="true"] body [data-testid="bottom-terminal-panel"]:not([data-has-browser-hole="true"]),
+html[data-agy-theme-enabled="true"] body #bottom-terminal-panel:not([data-has-browser-hole="true"]),
+html[data-agy-theme-enabled="true"] body [data-testid="bottom-terminal-panel-sidebar"]:not([data-has-browser-hole="true"]) {
+  background-color: var(--agy-surface-bg);
+  -webkit-backdrop-filter: blur(var(--agy-panel-blur, 14px));
+  backdrop-filter: blur(var(--agy-panel-blur, 14px));
+  border-top: 1px solid var(--agy-glass-border);
+}
+
+html[data-agy-theme-enabled="true"] body .xterm,
+html[data-agy-theme-enabled="true"] body .xterm .xterm-viewport {
+  background-color: transparent !important;
+}
+
+html[data-agy-theme-enabled="true"] body .monaco-editor,
+html[data-agy-theme-enabled="true"] body .monaco-editor .monaco-editor-background,
+html[data-agy-theme-enabled="true"] body .monaco-editor .margin {
+  background-color: color-mix(in srgb, var(--background) clamp(45%, calc(var(--agy-panel-opacity, 0.72) * 95%), 96%), transparent) !important;
+}
+
+/* ============================================================================
+ * 5. MODALS / SETTINGS OVERLAY, POPOVERS, MENUS & TOASTS
+ * ============================================================================ */
+
+html[data-agy-theme-enabled="true"] body .settings-modal-backdrop {
+  background-color: rgb(0 0 0 / 0.44);
+  -webkit-backdrop-filter: blur(calc(var(--agy-panel-blur, 14px) * 0.5));
+  backdrop-filter: blur(calc(var(--agy-panel-blur, 14px) * 0.5));
+}
+
+html[data-agy-theme-enabled="true"] body .agy-dialog,
+html[data-agy-theme-enabled="true"] body .settings-modal-container,
+html[data-agy-theme-enabled="true"] body [role="dialog"][aria-modal="true"],
+html[data-agy-theme-enabled="true"] body [role="alertdialog"] {
+  background-color: var(--agy-surface-overlay);
+  border-color: var(--agy-glass-border);
+  -webkit-backdrop-filter: blur(calc(var(--agy-panel-blur, 14px) + 4px)) saturate(1.35);
+  backdrop-filter: blur(calc(var(--agy-panel-blur, 14px) + 4px)) saturate(1.35);
+}
+
+html[data-agy-theme-enabled="true"] body [data-testid="settings-sidebar"] {
+  background-color: var(--agy-surface-card);
+  border-right: 1px solid var(--agy-glass-border);
+}
+
+html[data-agy-theme-enabled="true"] body .agy-dialog .agy-card {
+  background-color: var(--agy-surface-muted);
+  border-color: var(--agy-glass-border);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+html[data-agy-theme-enabled="true"] body .surface-glass:not([data-side-panel-body]):not([data-tiling-pane]):not([data-main-content-body]):not(:has([data-testid="sidecar-iframe"])),
+html[data-agy-theme-enabled="true"] body .surface-opaque:not([data-has-browser-hole="true"]):not([data-browser-hole="true"]):not([data-side-panel]):not([data-side-panel-body]):not([data-side-panel-strip]):not([data-tiling-pane]):not([data-main-content-body]):not(:has([data-testid="sidecar-iframe"])),
+html[data-agy-theme-enabled="true"] body .agy-overlay.surface-glass,
+html[data-agy-theme-enabled="true"] body [data-testid="context-menu-popup"],
+html[data-agy-theme-enabled="true"] body [data-testid="context-menu-submenu-popup"],
+html[data-agy-theme-enabled="true"] body [data-hover-card-popup],
+html[data-agy-theme-enabled="true"] body [data-select-popup],
+html[data-agy-theme-enabled="true"] body [role="menu"].agy-overlay,
+html[data-agy-theme-enabled="true"] body [role="listbox"].agy-overlay,
+html[data-agy-theme-enabled="true"] body [data-base-ui-portal] [role="menu"],
+html[data-agy-theme-enabled="true"] body [data-base-ui-portal] [role="listbox"],
+html[data-agy-theme-enabled="true"] body [data-radix-popper-content-wrapper] [role="menu"],
+html[data-agy-theme-enabled="true"] body [data-radix-popper-content-wrapper] [role="listbox"],
+html[data-agy-theme-enabled="true"] body .agy-fastpick.surface-glass,
+html[data-agy-theme-enabled="true"] body .quick-input-widget.surface-glass,
+html[data-agy-theme-enabled="true"] body .toast-root.agy-toast.surface-glass,
+html[data-agy-theme-enabled="true"] body .compact-tooltip {
+  background-color: var(--agy-surface-overlay);
+  border-color: var(--agy-glass-border);
+  -webkit-backdrop-filter: blur(calc(var(--agy-panel-blur, 14px) + 4px)) saturate(1.45);
+  backdrop-filter: blur(calc(var(--agy-panel-blur, 14px) + 4px)) saturate(1.45);
+}
+
+/* ============================================================================
+ * 6. USER CHAT BUBBLE BASE + 8 PRESETS (html[data-agy-bubble="..."])
+ * ============================================================================ */
+
+html[data-agy-theme-enabled="true"] body .agy-user-bubble-frame {
+  background-color: transparent;
+}
+
+html[data-agy-theme-enabled="true"] body .agy-user-bubble-card .user-input-buttons-container {
+  background-color: var(--agy-surface-overlay);
+  border-color: var(--agy-glass-border);
+  -webkit-backdrop-filter: blur(var(--agy-panel-blur, 14px));
+  backdrop-filter: blur(var(--agy-panel-blur, 14px));
+}
+
+/* Shared transition for live preset switching */
+html[data-agy-theme-enabled="true"] body .agy-user-bubble.agy-user-bubble {
+  transition: background 180ms ease, border-color 180ms ease, box-shadow 180ms ease, color 180ms ease;
+  -webkit-backdrop-filter: blur(var(--agy-panel-blur, 14px)) saturate(1.3);
+  backdrop-filter: blur(var(--agy-panel-blur, 14px)) saturate(1.3);
+}
+
+/* Preset 1: default */
+html[data-agy-theme-enabled="true"][data-agy-bubble="default"] body .agy-user-bubble.agy-user-bubble {
+  background-color: color-mix(in srgb, var(--glass) clamp(38%, calc(var(--agy-panel-opacity, 0.72) * 98%), 92%), transparent);
+  border: 1px solid var(--agy-glass-border);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.12), 0 6px 18px -8px rgb(0 0 0 / 0.28);
+}
+
+/* Preset 2: charcoal-cat */
+html[data-agy-theme-enabled="true"][data-agy-bubble="charcoal-cat"] body .agy-user-bubble.agy-user-bubble {
+  background: linear-gradient(145deg, rgb(44 39 51 / 0.88), rgb(28 25 35 / 0.92));
+  border: 1px solid rgb(244 172 196 / 0.36);
+  box-shadow: inset 0 1px 0 rgb(255 214 228 / 0.2), 0 8px 20px -8px rgb(20 12 28 / 0.55);
+  color: #f6eff8;
+  --foreground: #f6eff8;
+  --color-foreground: #f6eff8;
+  --muted-foreground: #d2c1da;
+  --color-muted-foreground: #d2c1da;
+}
+
+/* Preset 3: galaxy */
+html[data-agy-theme-enabled="true"][data-agy-bubble="galaxy"] body .agy-user-bubble.agy-user-bubble {
+  background: linear-gradient(135deg, rgb(24 22 60 / 0.88) 0%, rgb(52 24 84 / 0.86) 55%, rgb(18 46 82 / 0.88) 100%);
+  border: 1px solid rgb(167 139 250 / 0.44);
+  box-shadow: inset 0 1px 0 rgb(216 180 254 / 0.26), 0 8px 24px -8px rgb(99 102 241 / 0.48);
+  color: #eef2ff;
+  --foreground: #eef2ff;
+  --color-foreground: #eef2ff;
+  --muted-foreground: #c7d2fe;
+  --color-muted-foreground: #c7d2fe;
+}
+
+/* Preset 4: scroll */
+html[data-agy-theme-enabled="true"][data-agy-bubble="scroll"] body .agy-user-bubble.agy-user-bubble {
+  background: linear-gradient(160deg, rgb(247 236 210 / 0.94), rgb(232 213 175 / 0.92));
+  border: 1px solid rgb(166 120 68 / 0.55);
+  border-left: 3px solid rgb(154 102 48 / 0.78);
+  border-right: 3px solid rgb(154 102 48 / 0.78);
+  border-radius: 14px;
+  box-shadow: inset 0 1px 0 rgb(255 251 238 / 0.75), inset 0 -2px 6px rgb(135 92 44 / 0.14), 0 8px 20px -8px rgb(36 20 6 / 0.4);
+  color: #2c1e12;
+  --foreground: #2c1e12;
+  --color-foreground: #2c1e12;
+  --muted-foreground: #684c33;
+  --color-muted-foreground: #684c33;
+}
+
+/* Preset 5: jade-dragon */
+html[data-agy-theme-enabled="true"][data-agy-bubble="jade-dragon"] body .agy-user-bubble.agy-user-bubble {
+  background: linear-gradient(140deg, rgb(12 52 44 / 0.88), rgb(16 76 62 / 0.84));
+  border: 1px solid rgb(94 234 212 / 0.4);
+  border-left: 2.5px solid rgb(234 198 112 / 0.68);
+  box-shadow: inset 0 1px 0 rgb(167 243 208 / 0.22), 0 8px 22px -8px rgb(16 185 129 / 0.36);
+  color: #ecfdf5;
+  --foreground: #ecfdf5;
+  --color-foreground: #ecfdf5;
+  --muted-foreground: #a7f3d0;
+  --color-muted-foreground: #a7f3d0;
+}
+
+/* Preset 6: moon-witch */
+html[data-agy-theme-enabled="true"][data-agy-bubble="moon-witch"] body .agy-user-bubble.agy-user-bubble {
+  background: linear-gradient(145deg, rgb(28 20 46 / 0.9), rgb(48 28 74 / 0.86));
+  border: 1px solid rgb(216 180 254 / 0.44);
+  box-shadow: inset 0 1px 0 rgb(243 232 255 / 0.24), 0 8px 24px -8px rgb(147 51 234 / 0.4);
+  color: #f6f0ff;
+  --foreground: #f6f0ff;
+  --color-foreground: #f6f0ff;
+  --muted-foreground: #d8b4fe;
+  --color-muted-foreground: #d8b4fe;
+}
+
+/* Preset 7: fox */
+html[data-agy-theme-enabled="true"][data-agy-bubble="fox"] body .agy-user-bubble.agy-user-bubble {
+  background: linear-gradient(145deg, rgb(82 34 18 / 0.88), rgb(118 48 22 / 0.86));
+  border: 1px solid rgb(251 146 60 / 0.46);
+  box-shadow: inset 0 1px 0 rgb(254 215 170 / 0.26), 0 8px 22px -8px rgb(234 88 12 / 0.38);
+  color: #fff7ed;
+  --foreground: #fff7ed;
+  --color-foreground: #fff7ed;
+  --muted-foreground: #fed7aa;
+  --color-muted-foreground: #fed7aa;
+}
+
+/* Preset 8: frost-glass (adapts to dark & light modes) */
+html[data-agy-theme-enabled="true"][data-agy-bubble="frost-glass"] body.dark .agy-user-bubble.agy-user-bubble {
+  background: linear-gradient(145deg, rgb(200 230 255 / 0.17), rgb(148 204 255 / 0.1));
+  border: 1px solid rgb(210 238 255 / 0.36);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.3), 0 8px 24px -8px rgb(10 25 48 / 0.45);
+  -webkit-backdrop-filter: blur(calc(var(--agy-panel-blur, 14px) + 4px)) saturate(1.45);
+  backdrop-filter: blur(calc(var(--agy-panel-blur, 14px) + 4px)) saturate(1.45);
+  color: #f0f8ff;
+  --foreground: #f0f8ff;
+  --color-foreground: #f0f8ff;
+  --muted-foreground: #cbd5e1;
+  --color-muted-foreground: #cbd5e1;
+}
+
+html[data-agy-theme-enabled="true"][data-agy-bubble="frost-glass"] body:not(.dark) .agy-user-bubble.agy-user-bubble {
+  background: linear-gradient(145deg, rgb(255 255 255 / 0.74), rgb(226 241 255 / 0.6));
+  border: 1px solid rgb(120 172 224 / 0.42);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.85), 0 8px 24px -8px rgb(15 23 42 / 0.16);
+  -webkit-backdrop-filter: blur(calc(var(--agy-panel-blur, 14px) + 4px)) saturate(1.45);
+  backdrop-filter: blur(calc(var(--agy-panel-blur, 14px) + 4px)) saturate(1.45);
+  color: #0f172a;
+  --foreground: #0f172a;
+  --color-foreground: #0f172a;
+  --muted-foreground: #475569;
+  --color-muted-foreground: #475569;
+}
+
+/* ============================================================================
+ * 7. CHAT INPUT CONTAINER & 4 PRESETS (html[data-agy-input="..."])
+ * Specificity >= (0,6,2) beats body[data-agy-theme][data-newux-theme="onyx"].dark
+ * ============================================================================ */
+
+html[data-agy-theme-enabled="true"] body .agy-takeover-frame {
+  background-color: transparent;
+}
+
+html[data-agy-theme-enabled="true"] body .agy-takeover-card {
+  background-color: var(--agy-surface-overlay);
+  border: 1px solid var(--agy-glass-border);
+  -webkit-backdrop-filter: blur(var(--agy-panel-blur, 14px)) saturate(1.35);
+  backdrop-filter: blur(var(--agy-panel-blur, 14px)) saturate(1.35);
+}
+
+html[data-agy-theme-enabled="true"] body .surface-composer.surface-composer {
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+html[data-agy-theme-enabled="true"] body .surface-composer.surface-composer > .surface-composer-card.surface-composer-card {
+  transition: background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease, border-radius 180ms ease;
+}
+
+/* Keep inner text editor / layout wrappers inside composer card transparent so glass shows through */
+html[data-agy-theme-enabled="true"] body .surface-composer.surface-composer > .surface-composer-card.surface-composer-card :is(.bg-background, .bg-card, [contenteditable="true"]):not([role="dialog"]):not([role="menu"]):not([role="listbox"]):not([role="tooltip"]) {
+  background-color: transparent !important;
+  background-image: none !important;
+}
+
+/* Input Preset 1: glass */
+html[data-agy-theme-enabled="true"][data-agy-input="glass"] body .surface-composer.surface-composer > .surface-composer-card.surface-composer-card {
+  background-color: color-mix(in srgb, var(--glass) calc(var(--agy-composer-opacity, var(--agy-panel-opacity, 0.55)) * 90%), transparent) !important;
+  background-image: none !important;
+  -webkit-backdrop-filter: blur(var(--agy-composer-blur, var(--agy-panel-blur, 16px))) saturate(1.45) !important;
+  backdrop-filter: blur(var(--agy-composer-blur, var(--agy-panel-blur, 16px))) saturate(1.45) !important;
+  border: 1px solid var(--agy-glass-border) !important;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.16), 0 10px 30px -10px rgb(0 0 0 / 0.34) !important;
+}
+
+html[data-agy-theme-enabled="true"][data-agy-input="glass"] body .surface-composer.surface-composer:focus-within > .surface-composer-card.surface-composer-card {
+  border-color: color-mix(in srgb, var(--primary) 52%, var(--agy-glass-border-strong)) !important;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.22), 0 12px 34px -10px rgb(0 0 0 / 0.42) !important;
+}
+
+/* Input Preset 2: neon-border */
+html[data-agy-theme-enabled="true"][data-agy-input="neon-border"] body .surface-composer.surface-composer > .surface-composer-card.surface-composer-card {
+  background-color: color-mix(in srgb, var(--background) calc(var(--agy-composer-opacity, var(--agy-panel-opacity, 0.55)) * 88%), transparent) !important;
+  background-image: none !important;
+  -webkit-backdrop-filter: blur(var(--agy-composer-blur, var(--agy-panel-blur, 16px))) saturate(1.5) !important;
+  backdrop-filter: blur(var(--agy-composer-blur, var(--agy-panel-blur, 16px))) saturate(1.5) !important;
+  border: 1.5px solid color-mix(in srgb, var(--primary) 68%, #38bdf8) !important;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.16), 0 0 0 1px rgb(56 189 248 / 0.2), 0 0 18px -3px color-mix(in srgb, var(--primary) 55%, #a855f7) !important;
+}
+
+html[data-agy-theme-enabled="true"][data-agy-input="neon-border"] body .surface-composer.surface-composer:focus-within > .surface-composer-card.surface-composer-card {
+  border-color: #38bdf8 !important;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.22), 0 0 0 1px rgb(168 85 247 / 0.45), 0 0 26px -2px rgb(56 189 248 / 0.55) !important;
+}
+
+/* Input Preset 3: pill-float */
+html[data-agy-theme-enabled="true"][data-agy-input="pill-float"] body .surface-composer.surface-composer {
+  border-radius: 28px;
+}
+
+html[data-agy-theme-enabled="true"][data-agy-input="pill-float"] body .surface-composer.surface-composer > .surface-composer-card.surface-composer-card {
+  border-radius: 26px !important;
+  background-color: color-mix(in srgb, var(--card) calc(var(--agy-composer-opacity, var(--agy-panel-opacity, 0.55)) * 95%), transparent) !important;
+  background-image: none !important;
+  -webkit-backdrop-filter: blur(calc(var(--agy-composer-blur, var(--agy-panel-blur, 16px)) + 4px)) saturate(1.5) !important;
+  backdrop-filter: blur(calc(var(--agy-composer-blur, var(--agy-panel-blur, 16px)) + 4px)) saturate(1.5) !important;
+  border: 1px solid var(--agy-glass-border-strong) !important;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.22), 0 16px 38px -10px rgb(0 0 0 / 0.46), 0 4px 12px -2px rgb(0 0 0 / 0.22) !important;
+}
+
+html[data-agy-theme-enabled="true"][data-agy-input="pill-float"] body .surface-composer.surface-composer:focus-within > .surface-composer-card.surface-composer-card {
+  border-color: color-mix(in srgb, var(--primary) 62%, var(--agy-glass-border-strong)) !important;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.26), 0 20px 44px -10px rgb(0 0 0 / 0.52), 0 0 0 2px color-mix(in srgb, var(--primary) 24%, transparent) !important;
+}
+
+/* Input Preset 4: minimal-flat */
+html[data-agy-theme-enabled="true"][data-agy-input="minimal-flat"] body .surface-composer.surface-composer {
+  border-radius: 12px;
+}
+
+html[data-agy-theme-enabled="true"][data-agy-input="minimal-flat"] body .surface-composer.surface-composer > .surface-composer-card.surface-composer-card {
+  border-radius: 12px !important;
+  background-color: color-mix(in srgb, var(--background) calc(var(--agy-composer-opacity, var(--agy-panel-opacity, 0.55)) * 78%), transparent) !important;
+  background-image: none !important;
+  -webkit-backdrop-filter: blur(calc(var(--agy-composer-blur, var(--agy-panel-blur, 16px)) * 0.75)) !important;
+  backdrop-filter: blur(calc(var(--agy-composer-blur, var(--agy-panel-blur, 16px)) * 0.75)) !important;
+  border: 1px solid var(--agy-glass-border) !important;
+  box-shadow: none !important;
+}
+
+html[data-agy-theme-enabled="true"][data-agy-input="minimal-flat"] body .surface-composer.surface-composer:focus-within > .surface-composer-card.surface-composer-card {
+  border-color: var(--agy-glass-border-strong) !important;
+  box-shadow: none !important;
+}
+
+/* ============================================================================
+ * 8. SCROLLBARS (PRESERVE HIDDEN UTILITY & OVERLAY SCROLLBARS)
+ * ============================================================================ */
+
+html[data-agy-theme-enabled="true"] body :is(.md-table-scroll, :not(.overlay-scrollbars *)):not(.scrollbar-none):not(.jetski-scrollable-element)::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+html[data-agy-theme-enabled="true"] body :is(.md-table-scroll, :not(.overlay-scrollbars *)):not(.scrollbar-none):not(.jetski-scrollable-element)::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+html[data-agy-theme-enabled="true"] body :is(.md-table-scroll, :not(.overlay-scrollbars *)):not(.scrollbar-none):not(.jetski-scrollable-element)::-webkit-scrollbar-thumb {
+  background-color: color-mix(in srgb, var(--foreground) 18%, transparent);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+html[data-agy-theme-enabled="true"] body :is(.md-table-scroll, :not(.overlay-scrollbars *)):not(.scrollbar-none):not(.jetski-scrollable-element)::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in srgb, var(--foreground) 34%, transparent);
+}
+
+html[data-agy-theme-enabled="true"] body .scrollbar-muted::-webkit-scrollbar-thumb {
+  background-color: color-mix(in srgb, var(--foreground) 20%, transparent);
+}
+
+html[data-agy-theme-enabled="true"] body .scrollbar-muted::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in srgb, var(--foreground) 36%, transparent);
+}
