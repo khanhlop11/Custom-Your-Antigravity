@@ -1,8 +1,8 @@
 # Custom Your Antigravity
 
 <p align="center">
-  <strong>Tùy biến toàn diện cho Google Antigravity Desktop (Windows)</strong><br>
-  Tích hợp <strong>Custom Themes & Wallpapers</strong> cùng bộ quản lý <strong>Custom AI Providers & Models</strong> trong một trình cài đặt duy nhất.
+  <strong>The Ultimate Customization Mod for Google Antigravity Desktop (Windows)</strong><br>
+  Combines <strong>Custom Themes & Wallpapers</strong> with a native <strong>Custom AI Providers & Models Manager</strong> in a single, reversible installer.
 </p>
 
 <p align="center">
@@ -14,69 +14,82 @@
 
 ---
 
-## 🌟 Tính năng nổi bật
+## 🌟 Key Features
 
-### 1. 🎨 Custom Themes & Wallpapers
-- **Local Wallpaper Engine**: Thêm hình nền cá nhân cục bộ qua giao thức nội bộ `agy-theme://wallpaper/` (hỗ trợ `PNG`, `JPG`, `WebP`, `GIF`, `BMP`).
-- **Thanh trượt Glassmorphism & Độ trong suốt độc lập**:
-  - Độ mờ và làm tối hình nền (Background Dim & Blur).
-  - Độ trong suốt & hiệu ứng kính mờ cho Left Sidebar.
-  - Độ trong suốt & hiệu ứng kính mờ cho khung nhập Prompt (Composer).
-  - Độ trong suốt & hiệu ứng kính mờ cho thanh bên phải / bảng Swarm.
-- **8 Preset Bong bóng Chat**: `Default`, `Charcoal Cat`, `Galaxy`, `Scroll`, `Jade Dragon`, `Moon Witch`, `Fox`, `Frost Glass`.
-- **4 Preset Khung nhập Prompt**: `Frosted Glass`, `Neon Glow`, `Floating Pill`, `Minimal Flat`.
-- **Tùy chỉnh trực tiếp trong Settings**: Thêm tab **Custom Theme** ngay trong mục Cài đặt của Antigravity, tự động cập nhật ngay lập tức mà không cần khởi động lại app.
+### 1. 🎨 Custom Themes & Wallpaper Engine
+- **Local Wallpaper Engine**: Set custom background wallpapers offline via the local protocol `agy-theme://wallpaper/<filename>` (`PNG`, `JPG`, `WebP`, `GIF`, `BMP` up to 25 MB).
+- **Independent Glassmorphism & Opacity Controls**:
+  - Background Dim & Gaussian Blur sliders.
+  - Left Sidebar opacity & glass blur.
+  - Prompt Composer (input area) opacity & glass blur.
+  - Right Side Panel / Swarm board opacity & glass blur.
+- **8 Chat Bubble Presets**: `Default`, `Charcoal Cat`, `Galaxy`, `Scroll`, `Jade Dragon`, `Moon Witch`, `Fox`, and `Frost Glass`.
+- **4 Prompt Input Presets**: `Frosted Glass`, `Neon Glow`, `Floating Pill`, and `Minimal Flat`.
+- **Live Settings Integration**: Access the **Custom Theme** tab directly inside Antigravity's **Settings** menu. Appearance updates take effect in real time without restarting the application.
 
-### 2. 🤖 Custom AI Providers & Models
-- **Hỗ trợ thêm nhà cung cấp ngoài**: OpenAI, Anthropic, Ollama, DeepSeek, OpenRouter, Google Account Pools...
-- **Tích hợp Native Model Picker**: Chọn và chuyển đổi model trực tiếp ngay trong giao diện chat của Antigravity.
-- **Tương thích hoàn toàn với Multi-Agent (`/swarm`)**: Các worker subagent có thể gọi và chạy trên các model tùy chỉnh mượt mà.
-- **Nút Update Now thông minh**: Sau khi thêm hoặc xóa model, xuất hiện thông báo và nút **🔄 Update now** nổi bật để bạn chủ động khởi động lại Antigravity khi các tác vụ agent đang chạy hoàn tất (tránh bị gián đoạn giữa chừng).
+### 2. 🤖 Custom AI Providers & Model Management
+- **Third-Party Provider Support**: Add OpenAI, Anthropic (Claude), Ollama (Local), DeepSeek, OpenRouter, Google Account Pools, Cloudflare Workers AI, and custom OpenAI-compatible endpoints.
+- **Native Model Picker Integration**: Switch between custom and built-in models seamlessly directly from the chat interface.
+- **Full Multi-Agent & Swarm Support (`/swarm`)**: Delegate and assign tasks to custom models across autonomous agent workers.
+- **Smart "Update Now" Flow**: When adding or removing models, a prominent **🔄 Update now** banner and button appear so you can choose when to restart Antigravity without disrupting active agent tasks.
 
-### 3. 🛡️ An toàn & Có thể khôi phục 100%
-- Tự động sao lưu `app.asar` nguyên bản với mã băm SHA-256.
-- Hỗ trợ gỡ cài đặt sạch sẽ, trả lại nguyên trạng file gốc bất cứ lúc nào.
-
----
-
-## 🚀 Cài đặt (Installation)
-
-### Yêu cầu:
-- Ứng dụng **Antigravity Desktop** trên Windows (tại `%LOCALAPPDATA%\Programs\antigravity`).
-- **PowerShell** (Node.js 22 trở lên).
-
-### Các bước cài đặt:
-
-1. Đóng hẳn ứng dụng Antigravity (nếu ứng dụng đang chạy).
-2. Mở PowerShell tại thư mục này và chạy lệnh:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\install.ps1
-```
-
-*(Script sẽ tự động đóng các tiến trình Antigravity còn chạy ngầm, áp dụng bản vá tích hợp cả Themes lẫn Model Provider và kiểm tra tính toàn vẹn).*
+### 3. 🛡️ 100% Safe & Reversible
+- Automatically creates SHA-256 verified backups of original core files before patching.
+- Restore the original official Google Antigravity build byte-for-byte at any time with a single command.
 
 ---
 
-## ⚙️ Hướng dẫn sử dụng
+## 🚀 Quick Start (Installation)
 
-### 1. Tùy chỉnh Giao diện & Hình nền
-Vào **Settings** (Cài đặt) -> Chọn tab **Custom Theme** ở cột bên trái:
-- **Tải ảnh nền**: Nhấn **Upload Wallpaper** hoặc kéo thả ảnh vào khung.
-- **Điều chỉnh thanh trượt**: Kéo các thanh trượt Dim/Blur/Opacity theo ý thích để tạo hiệu ứng kính mờ.
-- **Chọn Preset**: Bấm chọn preset giao diện chat và khung nhập yêu thích.
+### Prerequisites:
+- **Antigravity Desktop** installed on Windows (`%LOCALAPPDATA%\Programs\antigravity`).
+- **Node.js** (v22 or newer).
+- **PowerShell** (Windows 10/11 default).
 
-### 2. Thêm Model AI mới
-Vào **Settings** -> Mục **Custom Models**:
-- Bấm **Add Model** -> Chọn nhà cung cấp (OpenAI, Claude, Ollama, v.v.).
-- Nhập API Key, Base URL và Model ID -> Bấm **Save**.
-- Sau khi lưu, bấm nút **🔄 Update now** hiển thị trên thanh công cụ để Antigravity nạp model mới cho danh sách chat và `/swarm`.
+### Installation Steps:
+
+1. Open PowerShell and clone the repository:
+   ```powershell
+   git clone https://github.com/khanhlop11/custom-your-antigravity.git
+   cd custom-your-antigravity
+   ```
+   *(Alternatively, click **Code -> Download ZIP** on GitHub, extract the folder, and open PowerShell inside it).*
+
+2. Run the installer:
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File .\install.ps1
+   ```
+
+The script will automatically:
+- Close any active Antigravity background processes.
+- Install required dependencies automatically if missing.
+- Backup the pristine application archive.
+- Apply the integrated Theme and Model Provider modifications.
+
+3. Launch **Antigravity** and enjoy your customized workspace!
 
 ---
 
-## 🔄 Gỡ cài đặt (Uninstallation)
+## 📖 How to Use
 
-Để gỡ bỏ hoàn toàn bản vá và khôi phục Antigravity về trạng thái nguyên bản của nhà phát hành:
+### 1. Customizing Themes & Wallpapers
+1. Open Antigravity and go to **Settings** (`Ctrl+,` or click the gear icon).
+2. Select **Custom Theme** in the left sidebar.
+3. **Upload Wallpapers**: Click **Upload Wallpaper** or drag & drop images into the dropzone.
+4. **Adjust Glassmorphism**: Use the sliders to customize opacity, blur, and dim levels to your liking.
+5. **Choose Presets**: Click on any of the chat bubble or input presets to apply them immediately.
+
+### 2. Adding Custom AI Models
+1. In **Settings**, navigate to **Custom Models**.
+2. Click **Add Model** and choose your provider (e.g., OpenAI, Claude, Ollama, OpenRouter).
+3. Fill in your **API Key**, **Base URL**, and **Model ID**, then click **Save**.
+4. Click the purple **🔄 Update now** button on the toolbar or notification banner to reload Antigravity and make your new model available in the chat dropdown and for `/swarm`.
+
+---
+
+## 🔄 Uninstallation (Restore to Factory Settings)
+
+To completely remove the mod and restore Antigravity to Google's official original state:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\uninstall.ps1
@@ -84,7 +97,7 @@ powershell -ExecutionPolicy Bypass -File .\uninstall.ps1
 
 ---
 
-## 👤 Tác giả
+## 👤 Author & License
 
-Phát triển và bảo trì bởi **[khanhlop11](https://github.com/khanhlop11)**.
-Mã nguồn phát hành theo giấy phép [Apache-2.0](LICENSE).
+Developed and maintained by **[khanhlop11](https://github.com/khanhlop11)**.  
+Released under the [Apache-2.0 License](LICENSE).
