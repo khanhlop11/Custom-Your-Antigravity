@@ -14,6 +14,25 @@
 
 ---
 
+## 📸 Screenshots & Demos
+
+### Custom Models Management & Native Chat Integration
+<p align="center">
+  <img src="assets/custom_models_dashboard.png" alt="Custom Models Dashboard in Settings" width="100%">
+</p>
+
+<p align="center">
+  <img src="assets/add_custom_model_modal.png" alt="Add Custom Model Dialog" width="49%">
+  <img src="assets/add_custom_model_provider_dropdown.png" alt="Supported Providers Dropdown" width="49%">
+</p>
+
+<p align="center">
+  <img src="assets/chat_model_dropdown.png" alt="Native Chat Model Picker" width="49%">
+  <img src="assets/reasoning_effort_levels.jpg" alt="Reasoning Effort Submenu (Low, Medium, High, Extra, Max)" width="49%">
+</p>
+
+---
+
 ## 🌟 Key Features
 
 ### 1. 🎨 Custom Themes & Wallpaper Engine
@@ -29,6 +48,12 @@
 
 ### 2. 🤖 Custom AI Providers & Model Management
 - **Third-Party Provider Support**: Add OpenAI, Anthropic (Claude), Ollama (Local), DeepSeek, OpenRouter, Google Account Pools, Cloudflare Workers AI, and custom OpenAI-compatible endpoints.
+- **⚡ Automatic Reasoning Level Detection & Submenus**: Automatically scans provider reasoning metadata (e.g. OpenRouter `reasoning.supported_efforts`, OpenAI o1/o3-mini, DeepSeek-R1). Directly integrates into Antigravity's native flyout submenus with all effort levels:
+  - **Low**
+  - **Medium**
+  - **High**
+  - **Extra** (`xhigh`)
+  - **Max** (`max`)
 - **Native Model Picker Integration**: Switch between custom and built-in models seamlessly directly from the chat interface.
 - **Full Multi-Agent & Swarm Support (`/swarm`)**: Delegate and assign tasks to custom models across autonomous agent workers.
 - **Smart "Update Now" Flow**: When adding or removing models, a prominent **🔄 Update now** banner and button appear so you can choose when to restart Antigravity without disrupting active agent tasks.
@@ -83,7 +108,8 @@ The script will automatically:
 1. In **Settings**, navigate to **Custom Models**.
 2. Click **Add Model** and choose your provider (e.g., OpenAI, Claude, Ollama, OpenRouter).
 3. Fill in your **API Key**, **Base URL**, and **Model ID**, then click **Save**.
-4. Click the purple **🔄 Update now** button on the toolbar or notification banner to reload Antigravity and make your new model available in the chat dropdown and for `/swarm`.
+4. For reasoning models, the mod automatically configures the flyout submenu with **Low**, **Medium**, **High**, **Extra**, and **Max** levels in the chat dropdown.
+5. Click the purple **🔄 Update now** button on the toolbar or notification banner to reload Antigravity and make your new model available in the chat dropdown and for `/swarm`.
 
 ---
 
