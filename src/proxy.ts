@@ -28,7 +28,10 @@ export interface CustomModel {
   enabled?: boolean;
   apiFormat?: import('./providers').ApiFormat;
   fallbackModels?: string[];
-  reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+  reasoningEffort?: import('./reasoningEfforts').ReasoningEffort;
+  reasoningEfforts?: import('./reasoningEfforts').ReasoningEffort[];
+  effortVariantOf?: string;
+  reasoningScanStatus?: 'known' | 'unknown' | 'error';
   compactionReasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
   compactionThresholdPercent?: number;
   thinkingBudget?: number;
@@ -239,7 +242,9 @@ function hasEffortVariants(model: CustomModel, allModels: CustomModel[]): boolea
   return allModels.some(
     (other) =>
       other.name !== model.name &&
-      ((other as any).copyFrom === model.name || other.displayName === `${model.displayName || model.name} (low)`),
+      other.enabled !== false &&
+      other.nativePickerAvailable !== false &&
+      other.effortVariantOf === model.name,
   );
 }
 

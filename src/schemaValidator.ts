@@ -147,8 +147,15 @@ export function validateCustomModel(model: unknown): ValidationResult {
   for (const field of ['enabled', 'rawUrl', 'gateway', 'supportsVision', 'supportsThinking', 'autoEffortVariants', 'nativePickerAvailable', 'encryptedHeaders', 'encryptedGoogleAccounts']) {
     if (m[field] !== undefined && typeof m[field] !== 'boolean') return { valid: false, error: `${field} must be a boolean` };
   }
+  if (m.reasoningEfforts !== undefined && (!Array.isArray(m.reasoningEfforts) ||
+    m.reasoningEfforts.length > 7 || m.reasoningEfforts.some((effort: unknown) =>
+      !['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(effort as string))))
+    return { valid: false, error: 'Invalid reasoningEfforts' };
+  if (m.effortVariantOf !== undefined && (typeof m.effortVariantOf !== 'string' || !m.effortVariantOf.startsWith('models/')))
+    return { valid: false, error: 'Invalid effortVariantOf' };
   for (const field of ['reasoningEffort', 'compactionReasoningEffort']) {
-    if (m[field] !== undefined && !['none', 'minimal', 'low', 'medium', 'high', 'xhigh'].includes(m[field] as string)) {
+    const allowed = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', ...(field === 'reasoningEffort' ? ['max'] : [])];
+    if (m[field] !== undefined && !allowed.includes(m[field] as string)) {
       return { valid: false, error: `Invalid ${field}` };
     }
   }
