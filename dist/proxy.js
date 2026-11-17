@@ -157,12 +157,16 @@ function matchCustomModel(models, ...selectors) {
                 selector === identity.placeholderValue));
     });
 }
+function hasEffortVariants(model, allModels) {
+    return allModels.some((other) => other.name !== model.name &&
+        (other.copyFrom === model.name || other.displayName === `${model.displayName || model.name} (low)`));
+}
 function customCloudCodeCatalog(upstream = {}) {
     const models = loadCustomModels();
     const identities = modelIdentities(models, upstream);
     const labels = (0, modelCatalog_1.catalogDisplayNames)(models, upstream);
     return (0, modelCatalog_1.mergeCloudCodeCatalog)(upstream, models
-        .filter((model) => identities.get(model.name)?.placeholderId)
+        .filter((model) => model.nativePickerAvailable !== false && !hasEffortVariants(model, models) && identities.get(model.name)?.placeholderId)
         .map((model) => {
         const identity = identities.get(model.name);
         const slug = identity.catalogId;
@@ -966,6 +970,8 @@ function handleGetAvailableModelsProxy(res, reqBody, lsUrl) {
                                 const fieldMapping = extractFieldMapping(sampleEntry.value);
                                 const newParts = [msgBody];
                                 for (const m of customModels) {
+                                    if (m.nativePickerAvailable === false || hasEffortVariants(m, customModels))
+                                        continue;
                                     const placeholderId = identities.get(m.name)?.placeholderId;
                                     if (!placeholderId)
                                         continue;

@@ -296,10 +296,10 @@ class ModelStore {
         writeJsonAtomic(this.filename, { models });
     }
     delete(name) {
-        const models = this.read().filter((model) => model.name !== name);
+        const models = this.read().filter((model) => model.name !== name && model.copyFrom !== name);
         for (const model of models) {
             if (Array.isArray(model.fallbackModels))
-                model.fallbackModels = model.fallbackModels.filter((item) => item !== name);
+                model.fallbackModels = model.fallbackModels.filter((item) => item !== name && item !== `${name}-low` && item !== `${name}-medium` && item !== `${name}-high`);
         }
         writeJsonAtomic(this.filename, { models });
     }

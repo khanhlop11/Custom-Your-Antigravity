@@ -4,10 +4,11 @@
  * Replaces ~9 duplicate regex blocks across proxy.js.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.NATIVE_DEFAULT_CHECKPOINT_THRESHOLD = exports.COMPACTION_TOKEN_RESERVE = void 0;
+exports.REASONING_MODEL_PATTERN = exports.NATIVE_DEFAULT_CHECKPOINT_THRESHOLD = exports.COMPACTION_TOKEN_RESERVE = void 0;
 exports.nativeCheckpointConfig = nativeCheckpointConfig;
 exports.nativeModelExperiments = nativeModelExperiments;
 exports.nativeCatalogCapabilities = nativeCatalogCapabilities;
+exports.isReasoningModel = isReasoningModel;
 exports.detectModelCapabilities = detectModelCapabilities;
 exports.detectModelCapabilitiesByName = detectModelCapabilitiesByName;
 /** Extra room for the native checkpoint prompt and a final tool result. */
@@ -71,6 +72,19 @@ function nativeCatalogCapabilities(model) {
     };
 }
 // ─── Detection ────────────────────────────────────────────────────────────
+exports.REASONING_MODEL_PATTERN = /thinking|reasoning|reasoner|o1|o3|o4|r1|opus-4|sonnet-4|claude-4|claude-3-7|3-7|4-7|3\.7|4\.7|qwq|deepseek-r1/i;
+function isReasoningModel(model) {
+    if (model.supportsThinking === false)
+        return false;
+    if (model.supportsThinking === true)
+        return true;
+    if (Array.isArray(model.supported_parameters) &&
+        model.supported_parameters.some((p) => p === 'reasoning' || p === 'reasoning_effort')) {
+        return true;
+    }
+    const text = `${model.externalModelName || ''} ${model.name || ''} ${model.displayName || ''}`;
+    return exports.REASONING_MODEL_PATTERN.test(text);
+}
 const THINKING_PATTERN = /thinking|reasoning|reasoner|o1|o3|r1|opus-4|sonnet-4|claude-4|3-7|4-7|3\.7|4\.7/i;
 const DEEPSEEK_PATTERN = /deepseek/i;
 const CLAUDE_PATTERN = /claude|opus|sonnet/i;

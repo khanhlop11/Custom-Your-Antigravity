@@ -38,6 +38,9 @@ export interface CustomModel {
     gateway?: boolean;
     supportsVision?: boolean;
     supportsThinking?: boolean;
+    autoEffortVariants?: boolean;
+    nativePickerAvailable?: boolean;
+    copyFrom?: string;
     googleProject?: string;
     googleAccounts?: import('./googleAccounts').GoogleAccount[];
     googlePool?: import('./googleAccounts').GooglePoolOptions;

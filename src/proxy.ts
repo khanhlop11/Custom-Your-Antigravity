@@ -46,6 +46,9 @@ export interface CustomModel {
   gateway?: boolean;
   supportsVision?: boolean;
   supportsThinking?: boolean;
+  autoEffortVariants?: boolean;
+  nativePickerAvailable?: boolean;
+  copyFrom?: string;
   googleProject?: string;
   googleAccounts?: import('./googleAccounts').GoogleAccount[];
   googlePool?: import('./googleAccounts').GooglePoolOptions;
@@ -232,6 +235,14 @@ function matchCustomModel(models: CustomModel[], ...selectors: unknown[]): Custo
   });
 }
 
+function hasEffortVariants(model: CustomModel, allModels: CustomModel[]): boolean {
+  return allModels.some(
+    (other) =>
+      other.name !== model.name &&
+      ((other as any).copyFrom === model.name || other.displayName === `${model.displayName || model.name} (low)`),
+  );
+}
+
 function customCloudCodeCatalog(upstream: unknown = {}): Record<string, unknown> {
   const models = loadCustomModels();
   const identities = modelIdentities(models, upstream);
@@ -239,7 +250,7 @@ function customCloudCodeCatalog(upstream: unknown = {}): Record<string, unknown>
   return mergeCloudCodeCatalog(
     upstream,
     models
-      .filter((model) => identities.get(model.name)?.placeholderId)
+      .filter((model) => model.nativePickerAvailable !== false && !hasEffortVariants(model, models) && identities.get(model.name)?.placeholderId)
       .map((model) => {
         const identity = identities.get(model.name)!;
         const slug = identity.catalogId;
@@ -1137,6 +1148,7 @@ function handleGetAvailableModelsProxy(res: http.ServerResponse, reqBody: Buffer
                 const newParts: Buffer[] = [msgBody];
 
                 for (const m of customModels) {
+                  if (m.nativePickerAvailable === false || hasEffortVariants(m, customModels)) continue;
                   const placeholderId = identities.get(m.name)?.placeholderId;
                   if (!placeholderId) continue;
                   const entry = encodeModelEntryForGetModels('models/' + placeholderId, m.displayName, fieldMapping);

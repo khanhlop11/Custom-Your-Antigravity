@@ -1335,16 +1335,35 @@ window.addEventListener('DOMContentLoaded', () => {
         );
         header.append(heading, actions);
         group.append(header, groupStatus);
-        for (const model of models) {
+        const isEffortCopy = (m: CustomModelEntry) =>
+          Boolean(m.copyFrom) || /^(.*?)\s*\((low|medium|high|xhigh|max)(?:\s+thinking)?\)\s*$/i.test(m.displayName || '');
+        const visibleModels = models.filter((m) => !isEffortCopy(m));
+        const listToRender = visibleModels.length > 0 ? visibleModels : models;
+        for (const model of listToRender) {
+          const variants = models.filter(
+            (other) =>
+              other.name !== model.name &&
+              (other.copyFrom === model.name ||
+                /^(.*?)\s*\((low|medium|high|xhigh|max)(?:\s+thinking)?\)\s*$/i.exec(other.displayName || '')?.[1]?.trim() ===
+                  (model.displayName || model.name).trim()),
+          );
+          const hasEffortOptions = variants.length > 0 || model.autoEffortVariants === true;
           const row = element('div', 'agy-row');
           row.dataset.modelName = model.name;
           row.dataset.enabled = String(model.enabled !== false);
           const info = element('div', 'agy-row-info');
+          const titleRow = element('div', 'flex items-center gap-2 flex-wrap');
+          titleRow.append(element('strong', '', model.displayName || model.name));
+          if (hasEffortOptions) {
+            const pill = element('span', 'agy-pill text-xs', '⚡ Reasoning: Low · Medium · High');
+            pill.style.cssText = 'background:#1e3a5f;color:#93c5fd;padding:1px 6px;border-radius:4px;font-size:11px;font-weight:500';
+            titleRow.append(pill);
+          }
           info.append(
-            element('strong', '', model.displayName || model.name),
+            titleRow,
             element('div', 'agy-muted', model.externalModelName),
           );
-          if (model.nativePickerAvailable === false) info.append(element('div', 'agy-muted',
+          if (model.nativePickerAvailable === false && !hasEffortOptions) info.append(element('div', 'agy-muted',
             typeof model.nativePickerError === 'string' ? model.nativePickerError :
               'Not currently available in the native model picker. Direct API access remains available.'));
           const rowStatus = statusNode();
@@ -1371,7 +1390,7 @@ window.addEventListener('DOMContentLoaded', () => {
             button('Test generation', () => openGenerationTest(model), rowStatus),
             button('Edit', () => openModelModal(model, 'edit'), rowStatus),
             button('Duplicate', () => openModelModal(model, 'duplicate'), rowStatus),
-            ...(model.supportsThinking === false
+            ...(model.supportsThinking === false || hasEffortOptions
               ? []
               : [
                   button(
@@ -1608,6 +1627,61 @@ window.addEventListener('DOMContentLoaded', () => {
       };
       updateGoogleVisibility();
       body.append(googleConfig);
+
+      const reasoningSection = element('div', 'agy-reasoning-section');
+      reasoningSection.style.cssText = 'margin:12px 0;padding:10px 12px;background:#202024;border:1px solid #333338;border-radius:8px';
+      const reasoningHeader = element('div', 'flex items-center justify-between gap-2');
+      const reasoningLabel = element('label', 'flex items-center gap-2 cursor-pointer font-medium');
+      const autoEffortCheckbox = element('input');
+      autoEffortCheckbox.type = 'checkbox';
+      autoEffortCheckbox.id = 'agy-auto-effort-variants';
+      const reasoningText = element('span', '', 'Enable reasoning levels in chat (Low / Medium / High)');
+      reasoningLabel.append(autoEffortCheckbox, reasoningText);
+      const reasoningBadge = element('span', 'agy-muted text-xs');
+      reasoningHeader.append(reasoningLabel, reasoningBadge);
+      const reasoningDesc = element(
+        'p',
+        'agy-muted text-xs',
+        'When enabled, Antigravity automatically displays a flyout submenu with Low, Medium, and High effort directly in the model selector, matching Gemini 3.8 Flash.',
+      );
+      reasoningDesc.style.marginTop = '4px';
+      reasoningSection.append(reasoningHeader, reasoningDesc);
+      body.append(reasoningSection);
+
+      const REASONING_SCAN_PATTERN = /thinking|reasoning|reasoner|o1|o3|o4|r1|opus-4|sonnet-4|claude-4|claude-3-7|3-7|4-7|3\.7|4\.7|qwq|deepseek-r1/i;
+      function checkAutoReasoning(): boolean {
+        const text = `${modelId.value} ${displayName.value} ${name.value}`;
+        return REASONING_SCAN_PATTERN.test(text);
+      }
+
+      let userToggledEffort = existing?.autoEffortVariants !== undefined;
+      if (existing?.autoEffortVariants !== undefined) {
+        autoEffortCheckbox.checked = Boolean(existing.autoEffortVariants);
+      } else {
+        autoEffortCheckbox.checked = existing?.supportsThinking !== false && (existing?.supportsThinking === true || checkAutoReasoning());
+      }
+
+      function updateReasoningUI(): void {
+        const detected = checkAutoReasoning();
+        if (!userToggledEffort) {
+          autoEffortCheckbox.checked = detected;
+        }
+        if (autoEffortCheckbox.checked) {
+          reasoningBadge.textContent = detected ? '⚡ Auto-detected: Reasoning model' : 'Reasoning levels enabled';
+          reasoningBadge.style.color = '#4ade80';
+        } else {
+          reasoningBadge.textContent = detected ? 'Reasoning detected (disabled)' : 'Standard model';
+          reasoningBadge.style.color = '#a1a1aa';
+        }
+      }
+      autoEffortCheckbox.addEventListener('change', () => {
+        userToggledEffort = true;
+        updateReasoningUI();
+      });
+      modelId.addEventListener('input', updateReasoningUI);
+      displayName.addEventListener('input', updateReasoningUI);
+      updateReasoningUI();
+
       const advanced = element('details');
       advanced.append(element('summary', '', 'Advanced settings'));
       const advancedGrid = element('div', 'agy-grid');
@@ -1918,6 +1992,8 @@ window.addEventListener('DOMContentLoaded', () => {
                 }
               : undefined,
           reasoningEffort: effort.value || undefined,
+          autoEffortVariants: autoEffortCheckbox.checked,
+          supportsThinking: autoEffortCheckbox.checked ? true : existing?.supportsThinking,
           compactionReasoningEffort: compactionEffort.value || undefined,
           compactionThresholdPercent,
           thinkingBudget: readNumber(thinking, 'Thinking budget'),
@@ -2080,6 +2156,13 @@ window.addEventListener('DOMContentLoaded', () => {
               // Prefer explicit form overrides; otherwise retain the catalog's advertised limits/capabilities.
               for (const key of ['contextWindow', 'maxOutputTokens', 'supportsVision', 'supportsThinking'] as const) {
                 if (config[key] === undefined && choice[key] !== undefined) config[key] = choice[key];
+              }
+              const choiceReasoning =
+                config.supportsThinking === true ||
+                (config.supportsThinking !== false && REASONING_SCAN_PATTERN.test(`${choice.id} ${choice.displayName || ''}`));
+              if (choiceReasoning) {
+                config.autoEffortVariants = true;
+                config.supportsThinking = true;
               }
               if (
                 typeof config.contextWindow === 'number' &&
@@ -2655,8 +2738,10 @@ window.addEventListener('DOMContentLoaded', () => {
       .replace(/^models\//, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase();
     const usedLabels = new Set(Object.values(modelsObj).map((entry) => entry?.displayName).filter((label) => typeof label === 'string'));
     let changed = false;
+    const hasVariants = (m: any) =>
+      customModels.some((other: any) => other.name !== m.name && (other.copyFrom === m.name || other.displayName === `${m.displayName || m.name} (low)`));
     for (const model of customModels) {
-      if (model.nativePickerAvailable === false) continue;
+      if (model.nativePickerAvailable === false || hasVariants(model)) continue;
       const authoritative = typeof model.nativeCatalogId === 'string' && typeof model.nativeModelId === 'string';
       const slug = authoritative ? model.nativeCatalogId : legacySlug(model);
       // Compatibility with older IPC: never guess a shared external alias for effort variants.

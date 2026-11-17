@@ -103,6 +103,29 @@ export function nativeCatalogCapabilities(model: CustomModelConfig): ModelCapabi
 
 // ─── Detection ────────────────────────────────────────────────────────────
 
+export const REASONING_MODEL_PATTERN =
+  /thinking|reasoning|reasoner|o1|o3|o4|r1|opus-4|sonnet-4|claude-4|claude-3-7|3-7|4-7|3\.7|4\.7|qwq|deepseek-r1/i;
+
+export function isReasoningModel(model: {
+  name?: string;
+  externalModelName?: string;
+  displayName?: string;
+  supportsThinking?: boolean;
+  provider?: string;
+  supported_parameters?: string[];
+}): boolean {
+  if (model.supportsThinking === false) return false;
+  if (model.supportsThinking === true) return true;
+  if (
+    Array.isArray(model.supported_parameters) &&
+    model.supported_parameters.some((p) => p === 'reasoning' || p === 'reasoning_effort')
+  ) {
+    return true;
+  }
+  const text = `${model.externalModelName || ''} ${model.name || ''} ${model.displayName || ''}`;
+  return REASONING_MODEL_PATTERN.test(text);
+}
+
 const THINKING_PATTERN = /thinking|reasoning|reasoner|o1|o3|r1|opus-4|sonnet-4|claude-4|3-7|4-7|3\.7|4\.7/i;
 const DEEPSEEK_PATTERN = /deepseek/i;
 const CLAUDE_PATTERN = /claude|opus|sonnet/i;

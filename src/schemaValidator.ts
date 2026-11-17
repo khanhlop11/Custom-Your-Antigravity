@@ -144,7 +144,7 @@ export function validateCustomModel(model: unknown): ValidationResult {
     return { valid: false, error: 'apiFormat must be openai, anthropic or google' };
   }
   if (m.provider === 'google-cloudcode' && m.apiFormat !== undefined && m.apiFormat !== 'google') return { valid: false, error: 'Google Cloud Code requires the google API format' };
-  for (const field of ['enabled', 'rawUrl', 'gateway', 'supportsVision', 'supportsThinking', 'encryptedHeaders', 'encryptedGoogleAccounts']) {
+  for (const field of ['enabled', 'rawUrl', 'gateway', 'supportsVision', 'supportsThinking', 'autoEffortVariants', 'nativePickerAvailable', 'encryptedHeaders', 'encryptedGoogleAccounts']) {
     if (m[field] !== undefined && typeof m[field] !== 'boolean') return { valid: false, error: `${field} must be a boolean` };
   }
   for (const field of ['reasoningEffort', 'compactionReasoningEffort']) {

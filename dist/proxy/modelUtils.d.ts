@@ -53,6 +53,15 @@ export declare function nativeModelExperiments(model: CustomModelConfig): {
  * itself always use detectModelCapabilities() and the real context window.
  */
 export declare function nativeCatalogCapabilities(model: CustomModelConfig): ModelCapabilities;
+export declare const REASONING_MODEL_PATTERN: RegExp;
+export declare function isReasoningModel(model: {
+    name?: string;
+    externalModelName?: string;
+    displayName?: string;
+    supportsThinking?: boolean;
+    provider?: string;
+    supported_parameters?: string[];
+}): boolean;
 /**
  * Detects model capabilities from a custom model config object.
  */

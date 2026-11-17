@@ -47,6 +47,7 @@ const googleOAuth_1 = require("./googleOAuth");
 const googleOnboarding_1 = require("./googleOnboarding");
 const generationProbe_1 = require("./generationProbe");
 const schemaValidator_1 = require("./schemaValidator");
+const modelUtils_1 = require("./proxy/modelUtils");
 const googleAccounts_1 = require("./googleAccounts");
 function checkedUrl(value) {
     const url = new URL(value);
@@ -209,14 +210,20 @@ function parseModels(data, provider) {
             : [item.input_modalities, item.architecture?.input_modalities, item.inference_metadata?.request_modality]
                 .find(Array.isArray)
                 ?.some((value) => typeof value === 'string' && value.toLowerCase() === 'image');
+        const modelId = String(nativeWorkers ? item.name || '' : item.id || item.model || item.name || '').replace(/^models\//, '');
+        const modelDisplayName = String(item.displayName || item.display_name || item.title || item.name || item.id || item.model || '');
+        const isAutoReasoning = (0, modelUtils_1.isReasoningModel)({
+            externalModelName: modelId,
+            displayName: modelDisplayName,
+        });
         const supportsThinking = typeof item.supportsThinking === 'boolean'
             ? item.supportsThinking
             : Array.isArray(item.supported_parameters)
                 ? item.supported_parameters.some((value) => value === 'reasoning' || value === 'reasoning_effort')
-                : undefined;
+                : isAutoReasoning ? true : undefined;
         return {
-            id: String(nativeWorkers ? item.name || '' : item.id || item.model || item.name || '').replace(/^models\//, ''),
-            displayName: String(item.displayName || item.display_name || item.title || item.name || item.id || item.model || ''),
+            id: modelId,
+            displayName: modelDisplayName,
             ...(contextWindow ? { contextWindow } : {}),
             ...(maxOutputTokens ? { maxOutputTokens } : {}),
             ...(supportsVision !== undefined ? { supportsVision } : {}),
@@ -293,8 +300,72 @@ function createModelManager(directory, codec, openExternal, overrides = {}) {
         persistGoogleAccount(modelName, account, previous);
     });
     function saveModel(model) {
+        const isVariant = Boolean(model.copyFrom) || /^(.*?)\s*\((low|medium|high|xhigh|max)(?:\s+thinking)?\)\s*$/i.test(model.displayName || '');
+        const isAutoReasoning = !isVariant && model.autoEffortVariants === true;
+        if (isAutoReasoning) {
+            model.supportsThinking = true;
+            model.nativePickerAvailable = false;
+        }
+        else if (!isVariant && (model.autoEffortVariants === false || model.supportsThinking === false)) {
+            model.nativePickerAvailable = true;
+        }
         const previous = store.read().find((saved) => saved.name === (model.originalName || model.name));
         store.save(model);
+        if (isAutoReasoning) {
+            try {
+                const format = (0, providers_1.resolveApiFormat)(model.provider, model.apiFormat);
+                const baseDisplayName = (model.displayName || model.externalModelName || model.name).replace(/\s*\((?:low|medium|high|xhigh|max)\)$/i, '').trim();
+                const efforts = ['low', 'medium', 'high'];
+                const budgets = [1024, 4096, 8192];
+                const existingList = store.read();
+                for (let i = 0; i < efforts.length; i++) {
+                    const effort = efforts[i];
+                    const targetName = `${model.name}-${effort}`;
+                    const existingVariant = existingList.find((m) => m.name === targetName || (m.copyFrom === model.name && m.reasoningEffort === effort));
+                    const variant = {
+                        ...model,
+                        name: existingVariant?.name || targetName,
+                        copyFrom: model.name,
+                        displayName: `${baseDisplayName} (${effort})`,
+                        reasoningEffort: effort,
+                        nativePickerAvailable: true,
+                    };
+                    delete variant.originalName;
+                    if (format !== 'openai') {
+                        const budget = budgets[i];
+                        variant.thinkingBudget = budget;
+                        variant.maxOutputTokens = Math.max(Number(model.maxOutputTokens) || 16384, budget + 1024);
+                    }
+                    store.save(variant);
+                }
+            }
+            catch {
+                /* ignore variant generation errors */
+            }
+        }
+        else if (!isVariant && (model.autoEffortVariants === false || model.supportsThinking === false)) {
+            const existingVariants = store.read().filter((m) => m.copyFrom === (model.originalName || model.name));
+            for (const v of existingVariants) {
+                store.delete(v.name);
+            }
+        }
+        else if (!isVariant) {
+            const existingVariants = store.read().filter((m) => m.copyFrom === (model.originalName || model.name));
+            for (const v of existingVariants) {
+                store.save({
+                    ...v,
+                    apiUrl: model.apiUrl,
+                    apiKey: model.apiKey,
+                    customHeaders: model.customHeaders,
+                    fallbackModels: model.fallbackModels,
+                    timeout: model.timeout,
+                    enabled: model.enabled,
+                    googleAccounts: model.googleAccounts,
+                    googleProject: model.googleProject,
+                    googlePool: model.googlePool,
+                });
+            }
+        }
         const current = store.read().find((saved) => saved.name === model.name);
         for (const account of Array.isArray(current?.googleAccounts) ? current.googleAccounts : []) {
             const old = (Array.isArray(previous?.googleAccounts) ? previous.googleAccounts : []).find((value) => value.id === account.id);
