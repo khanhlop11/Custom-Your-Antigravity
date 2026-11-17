@@ -2166,6 +2166,9 @@ window.addEventListener('DOMContentLoaded', () => {
             await modelsChanged();
             close();
             showUpdateNowBanner();
+            void storageAPI.scanModelReasoning().then(async (result) => {
+              if (result?.changed) await modelsChanged();
+            }).catch(() => {});
           },
           status,
           true,
@@ -2214,6 +2217,9 @@ window.addEventListener('DOMContentLoaded', () => {
             setStatus(status, `Saved ${saved} models.`);
             close();
             showUpdateNowBanner();
+            void storageAPI.scanModelReasoning().then(async (result) => {
+              if (result?.changed) await modelsChanged();
+            }).catch(() => {});
           },
           status,
         ),
