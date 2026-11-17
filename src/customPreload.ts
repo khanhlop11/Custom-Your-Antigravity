@@ -1352,7 +1352,9 @@ window.addEventListener('DOMContentLoaded', () => {
         );
         for (const model of visibleModels) {
           const variants = modelList.filter((other) => other.effortVariantOf === model.name);
-          const effortLevels = Array.isArray(model.reasoningEfforts) ? model.reasoningEfforts : [];
+          const effortLevels = Array.isArray(model.reasoningEfforts) && model.reasoningEfforts.length
+            ? model.reasoningEfforts
+            : variants.map((v) => v.reasoningEffort as string).filter(Boolean);
           const hasEffortOptions = variants.some((variant) =>
             variant.enabled !== false && variant.nativePickerAvailable !== false,
           );
@@ -1413,10 +1415,20 @@ window.addEventListener('DOMContentLoaded', () => {
                         element(
                           'p',
                           'agy-muted',
-                          'Creates three copies with low, medium and high reasoning effort. The provider must support reasoning. For Google and Anthropic formats the thinking budgets are 1,024 / 4,096 / 8,192 tokens; output limits increase if needed to fit the budget. Existing models and credentials are preserved.',
+                          'Creates copies with each reasoning effort level (Low, Medium, High, Extra, Max). The provider must support reasoning. For Google and Anthropic formats the thinking budgets are 1,024 / 4,096 / 8,192 / 16,384 / 32,768 tokens; output limits increase if needed to fit the budget. Existing models and credentials are preserved.',
                         ),
                       );
                       body.append(
+                        button(
+                          'Create all variants (Low, Medium, High, Extra, Max)',
+                          async () => {
+                            requireSuccess(await ipcRenderer.invoke('storage:create-effort-variants', model.name, true));
+                            close();
+                            await modelsChanged();
+                          },
+                          status,
+                          true,
+                        ),
                         button(
                           'Create three variants',
                           async () => {
@@ -1677,14 +1689,14 @@ window.addEventListener('DOMContentLoaded', () => {
       const autoEffortCheckbox = element('input');
       autoEffortCheckbox.type = 'checkbox';
       autoEffortCheckbox.id = 'agy-auto-effort-variants';
-      const reasoningText = element('span', '', 'Automatically scan reasoning levels for chat');
+      const reasoningText = element('span', '', 'Enable reasoning levels (Low, Medium, High, Extra, Max)');
       reasoningLabel.append(autoEffortCheckbox, reasoningText);
       const reasoningBadge = element('span', 'agy-muted text-xs');
       reasoningHeader.append(reasoningLabel, reasoningBadge);
       const reasoningDesc = element(
         'p',
         'agy-muted text-xs',
-        'The provider’s advertised reasoning levels are added to the model selector automatically. Providers that do not advertise levels keep the base model.',
+        'When enabled, all reasoning effort levels (Low, Medium, High, Extra, Max) are automatically added to the model selector flyout menu.',
       );
       reasoningDesc.style.marginTop = '4px';
       reasoningSection.append(reasoningHeader, reasoningDesc);
@@ -1693,17 +1705,13 @@ window.addEventListener('DOMContentLoaded', () => {
       autoEffortCheckbox.checked = existing?.autoEffortVariants !== false;
       function updateReasoningUI(): void {
         const metadata = knownReasoningMetadata(modelId.value);
-        const levels = metadata.reasoningEfforts || [];
+        const levels = metadata.reasoningEfforts && metadata.reasoningEfforts.length
+          ? metadata.reasoningEfforts
+          : ['low', 'medium', 'high', 'xhigh', 'max'];
         reasoningBadge.textContent = !autoEffortCheckbox.checked
-          ? 'Automatic scan disabled'
-          : levels.length
-            ? levels.map(reasoningEffortLabel).join(' · ')
-            : metadata.reasoningScanStatus === 'unknown'
-              ? 'The provider does not advertise reasoning levels.'
-              : metadata.reasoningScanStatus === 'error'
-                ? 'Reasoning scan failed; the base model is kept.'
-                : 'Reasoning levels will be scanned automatically.';
-        reasoningBadge.style.color = autoEffortCheckbox.checked && levels.length ? '#4ade80' : '#a1a1aa';
+          ? 'Reasoning levels disabled'
+          : levels.map(reasoningEffortLabel).join(' · ');
+        reasoningBadge.style.color = autoEffortCheckbox.checked ? '#4ade80' : '#a1a1aa';
       }
       autoEffortCheckbox.addEventListener('change', updateReasoningUI);
       modelId.addEventListener('input', updateReasoningUI);

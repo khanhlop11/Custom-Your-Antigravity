@@ -4,6 +4,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const electron_1 = require("electron");
 const storageAPI = {
     getCustomModels: () => electron_1.ipcRenderer.invoke('storage:get-custom-models'),
+    scanModelReasoning: () => electron_1.ipcRenderer.invoke('storage:create-effort-variants'),
     saveCustomModel: (model) => electron_1.ipcRenderer.invoke('storage:save-custom-model', model),
     deleteCustomModel: (name) => electron_1.ipcRenderer.invoke('storage:delete-custom-model', name),
     testModelConnection: (model) => electron_1.ipcRenderer.invoke('storage:test-model-connection', model),
@@ -18,6 +19,12 @@ window.addEventListener('DOMContentLoaded', () => {
     let renderVersion = 0;
     let searchTerm = '';
     let cancelModalOperation;
+    function reasoningEffortLabel(effort) {
+        const labels = {
+            none: 'None', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra', max: 'Max',
+        };
+        return labels[effort] || effort;
+    }
     const requireSuccess = (result) => {
         if (!result?.success)
             throw new Error(result?.error || 'The operation could not be completed.');
@@ -1132,27 +1139,29 @@ window.addEventListener('DOMContentLoaded', () => {
                 }, groupStatus));
                 header.append(heading, actions);
                 group.append(header, groupStatus);
-                const isEffortCopy = (m) => Boolean(m.copyFrom) || /^(.*?)\s*\((low|medium|high|xhigh|max)(?:\s+thinking)?\)\s*$/i.test(m.displayName || '');
-                const visibleModels = models.filter((m) => !isEffortCopy(m));
-                const listToRender = visibleModels.length > 0 ? visibleModels : models;
-                for (const model of listToRender) {
-                    const variants = models.filter((other) => other.name !== model.name &&
-                        (other.copyFrom === model.name ||
-                            /^(.*?)\s*\((low|medium|high|xhigh|max)(?:\s+thinking)?\)\s*$/i.exec(other.displayName || '')?.[1]?.trim() ===
-                                (model.displayName || model.name).trim()));
-                    const hasEffortOptions = variants.length > 0 || model.autoEffortVariants === true;
+                const visibleModels = models.filter((model) => !model.effortVariantOf || !modelList.some((parent) => parent.name === model.effortVariantOf));
+                for (const model of visibleModels) {
+                    const variants = modelList.filter((other) => other.effortVariantOf === model.name);
+                    const effortLevels = Array.isArray(model.reasoningEfforts) && model.reasoningEfforts.length
+                        ? model.reasoningEfforts
+                        : variants.map((v) => v.reasoningEffort).filter(Boolean);
+                    const hasEffortOptions = variants.some((variant) => variant.enabled !== false && variant.nativePickerAvailable !== false);
                     const row = element('div', 'agy-row');
                     row.dataset.modelName = model.name;
                     row.dataset.enabled = String(model.enabled !== false);
                     const info = element('div', 'agy-row-info');
                     const titleRow = element('div', 'flex items-center gap-2 flex-wrap');
                     titleRow.append(element('strong', '', model.displayName || model.name));
-                    if (hasEffortOptions) {
-                        const pill = element('span', 'agy-pill text-xs', '⚡ Reasoning: Low · Medium · High');
+                    if (effortLevels.length) {
+                        const pill = element('span', 'agy-pill text-xs', `⚡ Reasoning: ${effortLevels.map(reasoningEffortLabel).join(' · ')}`);
                         pill.style.cssText = 'background:#1e3a5f;color:#93c5fd;padding:1px 6px;border-radius:4px;font-size:11px;font-weight:500';
                         titleRow.append(pill);
                     }
                     info.append(titleRow, element('div', 'agy-muted', model.externalModelName));
+                    if (!effortLevels.length && model.reasoningScanStatus === 'unknown')
+                        info.append(element('div', 'agy-muted', 'The provider does not advertise reasoning levels.'));
+                    if (!effortLevels.length && model.reasoningScanStatus === 'error')
+                        info.append(element('div', 'agy-muted', 'Could not scan reasoning levels. The base model remains available.'));
                     if (model.nativePickerAvailable === false && !hasEffortOptions)
                         info.append(element('div', 'agy-muted', typeof model.nativePickerError === 'string' ? model.nativePickerError :
                             'Not currently available in the native model picker. Direct API access remains available.'));
@@ -1171,12 +1180,16 @@ window.addEventListener('DOMContentLoaded', () => {
                         : [
                             button('Effort variants', () => {
                                 const { body, status, close } = openModal('Create reasoning variants');
-                                body.append(element('p', 'agy-muted', 'Creates three copies with low, medium and high reasoning effort. The provider must support reasoning. For Google and Anthropic formats the thinking budgets are 1,024 / 4,096 / 8,192 tokens; output limits increase if needed to fit the budget. Existing models and credentials are preserved.'));
-                                body.append(button('Create three variants', async () => {
+                                body.append(element('p', 'agy-muted', 'Creates copies with each reasoning effort level (Low, Medium, High, Extra, Max). The provider must support reasoning. For Google and Anthropic formats the thinking budgets are 1,024 / 4,096 / 8,192 / 16,384 / 32,768 tokens; output limits increase if needed to fit the budget. Existing models and credentials are preserved.'));
+                                body.append(button('Create all variants (Low, Medium, High, Extra, Max)', async () => {
+                                    requireSuccess(await electron_1.ipcRenderer.invoke('storage:create-effort-variants', model.name, true));
+                                    close();
+                                    await modelsChanged();
+                                }, status, true), button('Create three variants', async () => {
                                     requireSuccess(await electron_1.ipcRenderer.invoke('storage:create-effort-variants', model.name));
                                     close();
                                     await modelsChanged();
-                                }, status, true));
+                                }, status));
                             }, rowStatus),
                         ]), button('Delete', () => openDeleteModelModal(model), rowStatus));
                     row.append(info, actions);
@@ -1320,6 +1333,36 @@ window.addEventListener('DOMContentLoaded', () => {
             };
             updateGoogleVisibility();
             body.append(googleConfig);
+            let choices = [];
+            let choicesConnectionKey = '';
+            function reasoningConnectionKey() {
+                return JSON.stringify([
+                    provider.value, apiUrl.value.trim(), keylessOpencode() ? 'none' : apiKey.value.trim() || 'none',
+                    apiFormat.value,
+                ]);
+            }
+            function knownReasoningMetadata(id) {
+                const choice = choicesConnectionKey === reasoningConnectionKey()
+                    ? choices.find((candidate) => candidate.id === id.trim())
+                    : undefined;
+                if (choice?.reasoningEfforts !== undefined)
+                    return {
+                        reasoningEfforts: [...choice.reasoningEfforts],
+                        reasoningScanStatus: choice.reasoningEfforts.length ? 'known' : 'unknown',
+                        supportsThinking: choice.supportsThinking,
+                    };
+                const prior = modelList.find((model) => model.externalModelName === id.trim() && model.provider === provider.value &&
+                    model.apiUrl === apiUrl.value.trim() && model.apiKey === (keylessOpencode() ? 'none' : apiKey.value.trim() || 'none') &&
+                    (model.apiFormat || preset().apiFormat) === apiFormat.value);
+                const source = prior || (existing?.externalModelName === id.trim() && existing.provider === provider.value &&
+                    existing.apiUrl === apiUrl.value.trim() && existing.apiKey === (keylessOpencode() ? 'none' : apiKey.value.trim() || 'none') &&
+                    (existing.apiFormat || preset().apiFormat) === apiFormat.value ? existing : undefined);
+                return {
+                    reasoningEfforts: source?.reasoningEfforts ? [...source.reasoningEfforts] : undefined,
+                    reasoningScanStatus: source?.reasoningScanStatus,
+                    supportsThinking: choice?.supportsThinking ?? source?.supportsThinking,
+                };
+            }
             const reasoningSection = element('div', 'agy-reasoning-section');
             reasoningSection.style.cssText = 'margin:12px 0;padding:10px 12px;background:#202024;border:1px solid #333338;border-radius:8px';
             const reasoningHeader = element('div', 'flex items-center justify-between gap-2');
@@ -1327,58 +1370,42 @@ window.addEventListener('DOMContentLoaded', () => {
             const autoEffortCheckbox = element('input');
             autoEffortCheckbox.type = 'checkbox';
             autoEffortCheckbox.id = 'agy-auto-effort-variants';
-            const reasoningText = element('span', '', 'Enable reasoning levels in chat (Low / Medium / High)');
+            const reasoningText = element('span', '', 'Enable reasoning levels (Low, Medium, High, Extra, Max)');
             reasoningLabel.append(autoEffortCheckbox, reasoningText);
             const reasoningBadge = element('span', 'agy-muted text-xs');
             reasoningHeader.append(reasoningLabel, reasoningBadge);
-            const reasoningDesc = element('p', 'agy-muted text-xs', 'When enabled, Antigravity automatically displays a flyout submenu with Low, Medium, and High effort directly in the model selector, matching Gemini 3.8 Flash.');
+            const reasoningDesc = element('p', 'agy-muted text-xs', 'When enabled, all reasoning effort levels (Low, Medium, High, Extra, Max) are automatically added to the model selector flyout menu.');
             reasoningDesc.style.marginTop = '4px';
             reasoningSection.append(reasoningHeader, reasoningDesc);
             body.append(reasoningSection);
-            const REASONING_SCAN_PATTERN = /thinking|reasoning|reasoner|o1|o3|o4|r1|opus-4|sonnet-4|claude-4|claude-3-7|3-7|4-7|3\.7|4\.7|qwq|deepseek-r1/i;
-            function checkAutoReasoning() {
-                const text = `${modelId.value} ${displayName.value} ${name.value}`;
-                return REASONING_SCAN_PATTERN.test(text);
-            }
-            let userToggledEffort = existing?.autoEffortVariants !== undefined;
-            if (existing?.autoEffortVariants !== undefined) {
-                autoEffortCheckbox.checked = Boolean(existing.autoEffortVariants);
-            }
-            else {
-                autoEffortCheckbox.checked = existing?.supportsThinking !== false && (existing?.supportsThinking === true || checkAutoReasoning());
-            }
+            autoEffortCheckbox.checked = existing?.autoEffortVariants !== false;
             function updateReasoningUI() {
-                const detected = checkAutoReasoning();
-                if (!userToggledEffort) {
-                    autoEffortCheckbox.checked = detected;
-                }
-                if (autoEffortCheckbox.checked) {
-                    reasoningBadge.textContent = detected ? '⚡ Auto-detected: Reasoning model' : 'Reasoning levels enabled';
-                    reasoningBadge.style.color = '#4ade80';
-                }
-                else {
-                    reasoningBadge.textContent = detected ? 'Reasoning detected (disabled)' : 'Standard model';
-                    reasoningBadge.style.color = '#a1a1aa';
-                }
+                const metadata = knownReasoningMetadata(modelId.value);
+                const levels = metadata.reasoningEfforts && metadata.reasoningEfforts.length
+                    ? metadata.reasoningEfforts
+                    : ['low', 'medium', 'high', 'xhigh', 'max'];
+                reasoningBadge.textContent = !autoEffortCheckbox.checked
+                    ? 'Reasoning levels disabled'
+                    : levels.map(reasoningEffortLabel).join(' · ');
+                reasoningBadge.style.color = autoEffortCheckbox.checked ? '#4ade80' : '#a1a1aa';
             }
-            autoEffortCheckbox.addEventListener('change', () => {
-                userToggledEffort = true;
-                updateReasoningUI();
-            });
+            autoEffortCheckbox.addEventListener('change', updateReasoningUI);
             modelId.addEventListener('input', updateReasoningUI);
-            displayName.addEventListener('input', updateReasoningUI);
-            updateReasoningUI();
+            apiUrl.addEventListener('input', updateReasoningUI);
+            apiKey.addEventListener('input', updateReasoningUI);
+            apiFormat.addEventListener('change', updateReasoningUI);
+            opencodeAuth.addEventListener('change', updateReasoningUI);
             const advanced = element('details');
             advanced.append(element('summary', '', 'Advanced settings'));
             const advancedGrid = element('div', 'agy-grid');
             const effort = selectField(advancedGrid, 'Reasoning effort', 'agy-reasoning-effort', ['', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].map((value) => [
                 value,
-                value || 'Provider default',
+                value ? reasoningEffortLabel(value) : 'Provider default',
             ]), String(existing?.reasoningEffort || ''));
             const thinking = field(advancedGrid, 'Thinking budget (tokens)', 'agy-thinking-budget', existing?.thinkingBudget != null ? String(existing.thinkingBudget) : '', 'number');
             const compactionEffort = selectField(advancedGrid, 'Compaction reasoning effort', 'agy-compaction-effort', ['', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'].map((value) => [
                 value,
-                value || 'Use normal model settings',
+                value ? reasoningEffortLabel(value) : 'Use normal model settings',
             ]), String(existing?.compactionReasoningEffort || ''));
             advancedGrid.append(element('p', 'agy-muted', 'Only recognized IDE continuation summaries use this effort. Choose low for faster summaries, or none if your model supports disabling reasoning. Normal chat keeps its settings.'));
             const maxOutput = field(advancedGrid, 'Maximum output tokens', 'agy-max-output', existing?.maxOutputTokens != null ? String(existing.maxOutputTokens) : '', 'number');
@@ -1431,8 +1458,8 @@ window.addEventListener('DOMContentLoaded', () => {
             const discoverySearch = field(discoveryFilter, 'Search provider models', 'agy-discovery-search', '', 'search');
             discoverySearch.placeholder = 'Filter by model name or ID';
             discoverySearch.addEventListener('input', () => showChoices());
-            let choices = [];
             const selected = new Set();
+            updateReasoningUI();
             let autoFetchTimer;
             let lastAutoFetchedKey = '';
             function scheduleAutoFetch() {
@@ -1454,11 +1481,14 @@ window.addEventListener('DOMContentLoaded', () => {
                         validUrl(urlVal);
                         lastAutoFetchedKey = fetchKey;
                         setStatus(status, 'Đang tự động tải danh sách model...');
+                        const discoveryConnectionKey = reasoningConnectionKey();
                         const result = await storageAPI.discoverModels(connection());
-                        if (!body.isConnected)
+                        if (!body.isConnected || discoveryConnectionKey !== reasoningConnectionKey())
                             return;
                         requireSuccess(result);
                         choices = result.models || [];
+                        choicesConnectionKey = discoveryConnectionKey;
+                        updateReasoningUI();
                         discoverySearch.value = '';
                         selected.clear();
                         showChoices();
@@ -1564,7 +1594,7 @@ window.addEventListener('DOMContentLoaded', () => {
                         : undefined,
                     reasoningEffort: effort.value || undefined,
                     autoEffortVariants: autoEffortCheckbox.checked,
-                    supportsThinking: autoEffortCheckbox.checked ? true : existing?.supportsThinking,
+                    ...knownReasoningMetadata(id),
                     compactionReasoningEffort: compactionEffort.value || undefined,
                     compactionThresholdPercent,
                     thinkingBudget: readNumber(thinking, 'Thinking budget'),
@@ -1643,9 +1673,14 @@ window.addEventListener('DOMContentLoaded', () => {
                 setStatus(status, result.message || 'Generation succeeded.');
             }, status), button('Fetch provider models', async () => {
                 setStatus(status, 'Fetching models…');
+                const discoveryConnectionKey = reasoningConnectionKey();
                 const result = await storageAPI.discoverModels(connection());
+                if (!body.isConnected || discoveryConnectionKey !== reasoningConnectionKey())
+                    return;
                 requireSuccess(result);
                 choices = result.models || [];
+                choicesConnectionKey = discoveryConnectionKey;
+                updateReasoningUI();
                 discoverySearch.value = '';
                 selected.clear();
                 showChoices();
@@ -1658,6 +1693,10 @@ window.addEventListener('DOMContentLoaded', () => {
                 await modelsChanged();
                 close();
                 showUpdateNowBanner();
+                void storageAPI.scanModelReasoning().then(async (result) => {
+                    if (result?.changed)
+                        await modelsChanged();
+                }).catch(() => { });
             }, status, true));
             body.append(actions, discoveryFilter, discovery);
             body.append(button('Add selected', async () => {
@@ -1670,16 +1709,16 @@ window.addEventListener('DOMContentLoaded', () => {
                         model.externalModelName === choice.id);
                     const config = modelConfig(choice.id, choice.displayName || choice.id, prior?.name || uniqueName(`models/${provider.value}/${choice.id}`));
                     // Prefer explicit form overrides; otherwise retain the catalog's advertised limits/capabilities.
-                    for (const key of ['contextWindow', 'maxOutputTokens', 'supportsVision', 'supportsThinking']) {
-                        if (config[key] === undefined && choice[key] !== undefined)
-                            config[key] = choice[key];
-                    }
-                    const choiceReasoning = config.supportsThinking === true ||
-                        (config.supportsThinking !== false && REASONING_SCAN_PATTERN.test(`${choice.id} ${choice.displayName || ''}`));
-                    if (choiceReasoning) {
-                        config.autoEffortVariants = true;
-                        config.supportsThinking = true;
-                    }
+                    if (config.contextWindow === undefined && choice.contextWindow !== undefined)
+                        config.contextWindow = choice.contextWindow;
+                    if (config.maxOutputTokens === undefined && choice.maxOutputTokens !== undefined)
+                        config.maxOutputTokens = choice.maxOutputTokens;
+                    if (config.supportsVision === undefined && choice.supportsVision !== undefined)
+                        config.supportsVision = choice.supportsVision;
+                    if (config.supportsThinking === undefined && choice.supportsThinking !== undefined)
+                        config.supportsThinking = choice.supportsThinking;
+                    if (config.reasoningEfforts === undefined && choice.reasoningEfforts !== undefined)
+                        config.reasoningEfforts = choice.reasoningEfforts;
                     if (typeof config.contextWindow === 'number' &&
                         typeof config.maxOutputTokens === 'number' &&
                         config.maxOutputTokens >= config.contextWindow &&
@@ -1698,6 +1737,10 @@ window.addEventListener('DOMContentLoaded', () => {
                 setStatus(status, `Saved ${saved} models.`);
                 close();
                 showUpdateNowBanner();
+                void storageAPI.scanModelReasoning().then(async (result) => {
+                    if (result?.changed)
+                        await modelsChanged();
+                }).catch(() => { });
             }, status));
             provider.addEventListener('change', () => {
                 if (autoFetchTimer)
@@ -1709,6 +1752,8 @@ window.addEventListener('DOMContentLoaded', () => {
                 apiKey.placeholder = preset().keyRequired ? 'Enter provider API key' : 'Optional for local servers';
                 updateWorkersHint();
                 choices = [];
+                choicesConnectionKey = '';
+                updateReasoningUI();
                 selected.clear();
                 discoverySearch.value = '';
                 showChoices();
@@ -1982,6 +2027,13 @@ window.addEventListener('DOMContentLoaded', () => {
         section.append(status, fleet, content);
         mount.append(section);
         void renderCustomModelsList();
+        void storageAPI.scanModelReasoning().then(async (result) => {
+            requireSuccess(result);
+            if (result.changed && section.isConnected && section.parentElement === mount)
+                await modelsChanged();
+        }).catch((error) => {
+            console.error('[Custom models] Automatic reasoning scan failed:', error);
+        });
     }
     let pickerSearch;
     function pickerVisible(menu) {
@@ -2149,7 +2201,8 @@ window.addEventListener('DOMContentLoaded', () => {
             .replace(/^models\//, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase();
         const usedLabels = new Set(Object.values(modelsObj).map((entry) => entry?.displayName).filter((label) => typeof label === 'string'));
         let changed = false;
-        const hasVariants = (m) => customModels.some((other) => other.name !== m.name && (other.copyFrom === m.name || other.displayName === `${m.displayName || m.name} (low)`));
+        const hasVariants = (model) => customModels.some((other) => other.effortVariantOf === model.name &&
+            other.enabled !== false && other.nativePickerAvailable !== false);
         for (const model of customModels) {
             if (model.nativePickerAvailable === false || hasVariants(model))
                 continue;

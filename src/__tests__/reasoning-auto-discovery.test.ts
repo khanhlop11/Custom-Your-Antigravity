@@ -104,6 +104,34 @@ describe('Reasoning Auto-Discovery & Variants', () => {
     expect(highVariant?.displayName).toBe('o3-mini (high)');
   });
 
+  it('generates all 5 native effort levels (Low, Medium, High, Extra, Max) when provider does not publish metadata', () => {
+    const store = new ModelStore(storeFile, mockCodec);
+    store.save({
+      name: 'models/custom-gpt-6-sol',
+      externalModelName: 'gpt-6.1-sol',
+      displayName: 'sol',
+      provider: 'custom',
+      apiUrl: 'https://api.xingchiapi.com/v1',
+      apiKey: 'test-key',
+      autoEffortVariants: true,
+      supportsThinking: true,
+    }, true);
+
+    const models = store.read();
+    expect(models).toHaveLength(6); // 1 base + 5 variants
+
+    const variants = models.filter((m) => m.effortVariantOf === 'models/custom-gpt-6-sol');
+    expect(variants).toHaveLength(5);
+    expect(variants.map((v) => v.reasoningEffort)).toEqual(['low', 'medium', 'high', 'xhigh', 'max']);
+    expect(variants.map((v) => v.displayName)).toEqual([
+      'sol (low)',
+      'sol (medium)',
+      'sol (high)',
+      'sol (xhigh)',
+      'sol (max)',
+    ]);
+  });
+
   it('cascades delete from base model to all its effort variants', () => {
     const store = new ModelStore(storeFile, mockCodec);
     store.save({

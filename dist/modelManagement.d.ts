@@ -1,6 +1,7 @@
 import { ModelStore, ModelEntry, SecretCodec } from './modelStore';
 import { loginGoogleAccount, GoogleLoginOptions } from './googleOAuth';
 import { prepareGoogleAccount } from './googleOnboarding';
+import { type ReasoningEffort } from './reasoningEfforts';
 import { GoogleAccount, GooglePoolOptions, refreshGoogleAccount, fetchGoogleQuota } from './googleAccounts';
 export interface ProbeParams {
     name?: string;
@@ -27,6 +28,7 @@ export interface DiscoveredModel {
     maxOutputTokens?: number;
     supportsVision?: boolean;
     supportsThinking?: boolean;
+    reasoningEfforts?: ReasoningEffort[];
 }
 export declare function checkedUrl(value: string): URL;
 /** Small bounded requests, no credential forwarding across redirects. */
@@ -55,7 +57,14 @@ export declare function createModelManager(directory: string, codec: SecretCodec
         }[];
         status: number;
     }>;
-    createEffortVariants(name: string): {
+    scanSavedModelReasoning: (name?: string, force?: boolean) => Promise<{
+        success: boolean;
+        changed: number;
+    }>;
+    createEffortVariants(name?: string, allLevels?: boolean): Promise<{
+        success: boolean;
+        changed: number;
+    }> | {
         success: boolean;
         count: number;
     };

@@ -8,6 +8,12 @@ export interface ModelEntry {
     description?: string;
     enabled?: boolean;
     encrypted?: boolean;
+    supportsThinking?: boolean;
+    autoEffortVariants?: boolean;
+    reasoningEffort?: import('./reasoningEfforts').ReasoningEffort;
+    reasoningEfforts?: import('./reasoningEfforts').ReasoningEffort[];
+    effortVariantOf?: string;
+    reasoningScanStatus?: 'known' | 'unknown' | 'error';
     [key: string]: unknown;
 }
 export interface SecretCodec {
@@ -33,7 +39,7 @@ export declare class ModelStore {
     save(input: ModelEntry & {
         originalName?: string;
         copyFrom?: string;
-    }): void;
+    }, syncEfforts?: boolean): void;
     delete(name: string): void;
     import(payload: unknown): number;
     export(): {

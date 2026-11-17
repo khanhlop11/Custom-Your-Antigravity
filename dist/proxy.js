@@ -159,7 +159,9 @@ function matchCustomModel(models, ...selectors) {
 }
 function hasEffortVariants(model, allModels) {
     return allModels.some((other) => other.name !== model.name &&
-        (other.copyFrom === model.name || other.displayName === `${model.displayName || model.name} (low)`));
+        other.enabled !== false &&
+        other.nativePickerAvailable !== false &&
+        other.effortVariantOf === model.name);
 }
 function customCloudCodeCatalog(upstream = {}) {
     const models = loadCustomModels();

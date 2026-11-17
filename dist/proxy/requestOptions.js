@@ -237,8 +237,23 @@ function applyRequestOptions(payload, model, format, stream, compactionEffort) {
             else
                 result.max_tokens = model.maxOutputTokens;
         }
-        if (compactionEffort === undefined && format === 'openai' && model.reasoningEffort !== undefined)
-            result.reasoning_effort = model.reasoningEffort;
+        if (compactionEffort === undefined && format === 'openai' && model.reasoningEffort !== undefined) {
+            const openRouter = model.provider === 'openrouter' || /^https:\/\/openrouter\.ai(?:\/|$)/i.test(model.apiUrl);
+            if (openRouter) {
+                const reasoning = result.reasoning && typeof result.reasoning === 'object' && !Array.isArray(result.reasoning)
+                    ? { ...result.reasoning }
+                    : {};
+                delete reasoning.max_tokens;
+                result.reasoning =
+                    model.reasoningEffort === 'none'
+                        ? { ...reasoning, effort: 'none', enabled: false }
+                        : { ...reasoning, effort: model.reasoningEffort, enabled: true };
+                delete result.reasoning_effort;
+            }
+            else {
+                result.reasoning_effort = model.reasoningEffort;
+            }
+        }
         if (compactionEffort === undefined && format === 'anthropic' && model.thinkingBudget !== undefined) {
             if (model.thinkingBudget === 0)
                 result.thinking = { type: 'disabled' };

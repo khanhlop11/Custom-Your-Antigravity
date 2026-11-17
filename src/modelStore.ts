@@ -1,6 +1,6 @@
 /** Backward-compatible model storage shared by the addon and proxy. */
 import * as fs from 'node:fs';
-import { normalizeReasoningEfforts } from './reasoningEfforts';
+import { normalizeReasoningEfforts, type ReasoningEffort } from './reasoningEfforts';
 import { resolveApiFormat, type ApiFormat } from './providers';
 import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -265,9 +265,12 @@ export class ModelStore {
     if (syncEfforts && !prepared.effortVariantOf) {
       const parents = new Set([sourceName, target]);
       const owned = models.filter((model) => parents.has(String(model.effortVariantOf)));
-      const efforts = prepared.autoEffortVariants !== false && prepared.supportsThinking !== false &&
+      const declared = normalizeReasoningEfforts(prepared.reasoningEfforts);
+      const allNativeEfforts: ReasoningEffort[] = ['low', 'medium', 'high', 'xhigh', 'max'];
+      const efforts = prepared.autoEffortVariants === true && prepared.supportsThinking !== false &&
         resolveApiFormat(prepared.provider, prepared.apiFormat as ApiFormat | undefined) === 'openai'
-        ? normalizeReasoningEfforts(prepared.reasoningEfforts) || [] : [];
+        ? (declared && declared.length > 0 ? declared : allNativeEfforts)
+        : [];
       const removed = new Set(owned.map((model) => model.name));
       for (const child of owned) models.splice(models.indexOf(child), 1);
       for (const effort of efforts) {

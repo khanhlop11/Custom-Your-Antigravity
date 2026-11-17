@@ -688,16 +688,20 @@ export function createModelManager(
     presets: () => PROVIDERS,
     discoverModels,
     scanSavedModelReasoning,
-    createEffortVariants(name?: string) {
+    createEffortVariants(name?: string, allLevels = false) {
       if (!name || typeof name !== 'string') return scanSavedModelReasoning();
       const source = store.list().find((model) => model.name === name);
       if (!source) throw new Error('Original model no longer exists');
       if (source.supportsThinking === false) throw new Error('This model is configured without reasoning support');
       const names = new Set(store.list().map((model) => model.name));
       const format = resolveApiFormat(source.provider, source.apiFormat as ProbeParams['apiFormat']);
-      const efforts = Array.isArray(source.reasoningEfforts) && source.reasoningEfforts.length
+      const declared = Array.isArray(source.reasoningEfforts) && source.reasoningEfforts.length
         ? source.reasoningEfforts.filter((e) => e !== 'none')
+        : undefined;
+      const fallbackEfforts = allLevels
+        ? (['low', 'medium', 'high', 'xhigh', 'max'] as const)
         : (['low', 'medium', 'high'] as const);
+      const efforts = declared || fallbackEfforts;
       const baseDisplayName = (source.displayName || source.externalModelName || source.name)
         .replace(/\s*\((?:low|medium|high|xhigh|max)(?:\s+thinking)?\)$/i, '').trim();
       const copies = efforts.map((effort, index) => {
@@ -714,7 +718,14 @@ export function createModelManager(
           reasoningEffort: effort as ReasoningEffort,
         };
         if (format !== 'openai') {
-          const budget = [1024, 4096, 8192][index] ?? 4096;
+          const budgets: Record<string, number> = {
+            low: 1024,
+            medium: 4096,
+            high: 8192,
+            xhigh: 16384,
+            max: 32768,
+          };
+          const budget = budgets[effort] ?? 4096;
           copy.thinkingBudget = budget;
           copy.maxOutputTokens = Math.max(Number(source.maxOutputTokens) || 16384, budget + 1024);
           if (source.contextWindow && Number(source.contextWindow) <= Number(copy.maxOutputTokens))

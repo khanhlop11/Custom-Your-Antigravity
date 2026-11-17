@@ -42,6 +42,8 @@ exports.decodeSecret = decodeSecret;
 exports.redactModel = redactModel;
 /** Backward-compatible model storage shared by the addon and proxy. */
 const fs = __importStar(require("node:fs"));
+const reasoningEfforts_1 = require("./reasoningEfforts");
+const providers_1 = require("./providers");
 const path = __importStar(require("node:path"));
 const node_crypto_1 = require("node:crypto");
 const schemaValidator_1 = require("./schemaValidator");
@@ -270,7 +272,7 @@ class ModelStore {
         }
         return model;
     }
-    save(input) {
+    save(input, syncEfforts = false) {
         const models = this.read();
         const target = input.name?.startsWith('models/') ? input.name : `models/${input.name}`;
         const sourceName = input.originalName || input.copyFrom || target;
@@ -293,13 +295,54 @@ class ModelStore {
                     model.fallbackModels = model.fallbackModels.map((name) => (name === sourceName ? target : name));
             }
         }
+        if (syncEfforts && !prepared.effortVariantOf) {
+            const parents = new Set([sourceName, target]);
+            const owned = models.filter((model) => parents.has(String(model.effortVariantOf)));
+            const declared = (0, reasoningEfforts_1.normalizeReasoningEfforts)(prepared.reasoningEfforts);
+            const allNativeEfforts = ['low', 'medium', 'high', 'xhigh', 'max'];
+            const efforts = prepared.autoEffortVariants === true && prepared.supportsThinking !== false &&
+                (0, providers_1.resolveApiFormat)(prepared.provider, prepared.apiFormat) === 'openai'
+                ? (declared && declared.length > 0 ? declared : allNativeEfforts)
+                : [];
+            const removed = new Set(owned.map((model) => model.name));
+            for (const child of owned)
+                models.splice(models.indexOf(child), 1);
+            for (const effort of efforts) {
+                const previous = owned.find((model) => model.reasoningEffort === effort);
+                let childName = previous?.name || `${target}-${effort}`;
+                let suffix = 2;
+                while (models.some((model) => model.name === childName))
+                    childName = `${target}-${effort}-${suffix++}`;
+                const baseDisplayName = (prepared.displayName || prepared.externalModelName || target)
+                    .replace(/\s*\((?:low|medium|high|xhigh|max)(?:\s+thinking)?\)$/i, '').trim();
+                const child = {
+                    ...prepared, name: childName, effortVariantOf: target, autoEffortVariants: false,
+                    displayName: `${baseDisplayName} (${effort})`,
+                    reasoningEffort: effort,
+                };
+                // The named effort is the sole reasoning control for a managed variant.
+                delete child.thinkingBudget;
+                if (child.extraBody && typeof child.extraBody === 'object') {
+                    child.extraBody = { ...child.extraBody };
+                    delete child.extraBody.reasoning_effort;
+                    delete child.extraBody.reasoning;
+                }
+                models.push(child);
+                removed.delete(childName);
+            }
+            for (const model of models)
+                if (Array.isArray(model.fallbackModels))
+                    model.fallbackModels = model.fallbackModels.filter((name) => !removed.has(name));
+        }
         writeJsonAtomic(this.filename, { models });
     }
     delete(name) {
-        const models = this.read().filter((model) => model.name !== name && model.copyFrom !== name);
+        const saved = this.read();
+        const removed = new Set(saved.filter((model) => model.name === name || model.effortVariantOf === name || model.copyFrom === name).map((model) => model.name));
+        const models = saved.filter((model) => !removed.has(model.name));
         for (const model of models) {
             if (Array.isArray(model.fallbackModels))
-                model.fallbackModels = model.fallbackModels.filter((item) => item !== name && item !== `${name}-low` && item !== `${name}-medium` && item !== `${name}-high`);
+                model.fallbackModels = model.fallbackModels.filter((item) => !removed.has(item));
         }
         writeJsonAtomic(this.filename, { models });
     }

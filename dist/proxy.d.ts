@@ -20,7 +20,10 @@ export interface CustomModel {
     enabled?: boolean;
     apiFormat?: import('./providers').ApiFormat;
     fallbackModels?: string[];
-    reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoningEffort?: import('./reasoningEfforts').ReasoningEffort;
+    reasoningEfforts?: import('./reasoningEfforts').ReasoningEffort[];
+    effortVariantOf?: string;
+    reasoningScanStatus?: 'known' | 'unknown' | 'error';
     compactionReasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     compactionThresholdPercent?: number;
     thinkingBudget?: number;

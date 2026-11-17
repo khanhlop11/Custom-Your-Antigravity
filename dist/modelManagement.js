@@ -47,7 +47,7 @@ const googleOAuth_1 = require("./googleOAuth");
 const googleOnboarding_1 = require("./googleOnboarding");
 const generationProbe_1 = require("./generationProbe");
 const schemaValidator_1 = require("./schemaValidator");
-const modelUtils_1 = require("./proxy/modelUtils");
+const reasoningEfforts_1 = require("./reasoningEfforts");
 const googleAccounts_1 = require("./googleAccounts");
 function checkedUrl(value) {
     const url = new URL(value);
@@ -212,15 +212,14 @@ function parseModels(data, provider) {
                 ?.some((value) => typeof value === 'string' && value.toLowerCase() === 'image');
         const modelId = String(nativeWorkers ? item.name || '' : item.id || item.model || item.name || '').replace(/^models\//, '');
         const modelDisplayName = String(item.displayName || item.display_name || item.title || item.name || item.id || item.model || '');
-        const isAutoReasoning = (0, modelUtils_1.isReasoningModel)({
-            externalModelName: modelId,
-            displayName: modelDisplayName,
-        });
+        const reasoningEfforts = (0, reasoningEfforts_1.catalogReasoningEfforts)(item, provider === 'openrouter');
         const supportsThinking = typeof item.supportsThinking === 'boolean'
             ? item.supportsThinking
-            : Array.isArray(item.supported_parameters)
-                ? item.supported_parameters.some((value) => value === 'reasoning' || value === 'reasoning_effort')
-                : isAutoReasoning ? true : undefined;
+            : reasoningEfforts !== undefined
+                ? reasoningEfforts.some((effort) => effort !== 'none')
+                : Array.isArray(item.supported_parameters)
+                    ? item.supported_parameters.some((value) => value === 'reasoning' || value === 'reasoning_effort')
+                    : undefined;
         return {
             id: modelId,
             displayName: modelDisplayName,
@@ -228,6 +227,7 @@ function parseModels(data, provider) {
             ...(maxOutputTokens ? { maxOutputTokens } : {}),
             ...(supportsVision !== undefined ? { supportsVision } : {}),
             ...(supportsThinking !== undefined ? { supportsThinking } : {}),
+            ...(reasoningEfforts !== undefined ? { reasoningEfforts } : {}),
         };
     })
         .filter((item) => {
@@ -300,72 +300,8 @@ function createModelManager(directory, codec, openExternal, overrides = {}) {
         persistGoogleAccount(modelName, account, previous);
     });
     function saveModel(model) {
-        const isVariant = Boolean(model.copyFrom) || /^(.*?)\s*\((low|medium|high|xhigh|max)(?:\s+thinking)?\)\s*$/i.test(model.displayName || '');
-        const isAutoReasoning = !isVariant && model.autoEffortVariants === true;
-        if (isAutoReasoning) {
-            model.supportsThinking = true;
-            model.nativePickerAvailable = false;
-        }
-        else if (!isVariant && (model.autoEffortVariants === false || model.supportsThinking === false)) {
-            model.nativePickerAvailable = true;
-        }
         const previous = store.read().find((saved) => saved.name === (model.originalName || model.name));
-        store.save(model);
-        if (isAutoReasoning) {
-            try {
-                const format = (0, providers_1.resolveApiFormat)(model.provider, model.apiFormat);
-                const baseDisplayName = (model.displayName || model.externalModelName || model.name).replace(/\s*\((?:low|medium|high|xhigh|max)\)$/i, '').trim();
-                const efforts = ['low', 'medium', 'high'];
-                const budgets = [1024, 4096, 8192];
-                const existingList = store.read();
-                for (let i = 0; i < efforts.length; i++) {
-                    const effort = efforts[i];
-                    const targetName = `${model.name}-${effort}`;
-                    const existingVariant = existingList.find((m) => m.name === targetName || (m.copyFrom === model.name && m.reasoningEffort === effort));
-                    const variant = {
-                        ...model,
-                        name: existingVariant?.name || targetName,
-                        copyFrom: model.name,
-                        displayName: `${baseDisplayName} (${effort})`,
-                        reasoningEffort: effort,
-                        nativePickerAvailable: true,
-                    };
-                    delete variant.originalName;
-                    if (format !== 'openai') {
-                        const budget = budgets[i];
-                        variant.thinkingBudget = budget;
-                        variant.maxOutputTokens = Math.max(Number(model.maxOutputTokens) || 16384, budget + 1024);
-                    }
-                    store.save(variant);
-                }
-            }
-            catch {
-                /* ignore variant generation errors */
-            }
-        }
-        else if (!isVariant && (model.autoEffortVariants === false || model.supportsThinking === false)) {
-            const existingVariants = store.read().filter((m) => m.copyFrom === (model.originalName || model.name));
-            for (const v of existingVariants) {
-                store.delete(v.name);
-            }
-        }
-        else if (!isVariant) {
-            const existingVariants = store.read().filter((m) => m.copyFrom === (model.originalName || model.name));
-            for (const v of existingVariants) {
-                store.save({
-                    ...v,
-                    apiUrl: model.apiUrl,
-                    apiKey: model.apiKey,
-                    customHeaders: model.customHeaders,
-                    fallbackModels: model.fallbackModels,
-                    timeout: model.timeout,
-                    enabled: model.enabled,
-                    googleAccounts: model.googleAccounts,
-                    googleProject: model.googleProject,
-                    googlePool: model.googlePool,
-                });
-            }
-        }
+        store.save(model, true);
         const current = store.read().find((saved) => saved.name === model.name);
         for (const account of Array.isArray(current?.googleAccounts) ? current.googleAccounts : []) {
             const old = (Array.isArray(previous?.googleAccounts) ? previous.googleAccounts : []).find((value) => value.id === account.id);
@@ -629,6 +565,72 @@ function createModelManager(directory, codec, openExternal, overrides = {}) {
         }
         throw new Error('Model discovery exceeded the maximum number of pages');
     }
+    // One bounded catalog fetch per saved connection; secrets never leave the existing discovery path.
+    const scanCache = new Map();
+    let scanning;
+    const scanSignature = (model) => JSON.stringify([
+        model.provider, model.apiUrl, model.apiFormat, model.apiKey, model.customHeaders,
+        model.externalModelName, model.enabled, model.autoEffortVariants,
+    ]);
+    async function scanSavedModelReasoning(name, force = false) {
+        if (scanning) {
+            const pending = await scanning;
+            return name ? scanSavedModelReasoning(name, force) : pending;
+        }
+        const run = async () => {
+            let changed = 0;
+            const roots = store.list().filter((model) => !model.effortVariantOf && model.enabled !== false &&
+                model.autoEffortVariants !== false && (!name || model.name === name) &&
+                (0, providers_1.resolveApiFormat)(model.provider, model.apiFormat) === 'openai');
+            for (const snapshot of roots) {
+                const raw = store.read().find((model) => model.name === snapshot.name);
+                if (!raw)
+                    continue;
+                const signature = scanSignature(raw);
+                const connection = JSON.stringify([raw.provider, raw.apiUrl, raw.apiFormat, raw.apiKey, raw.customHeaders]);
+                let catalog = scanCache.get(connection);
+                if (!catalog || (force && name) || dependencies.now() - catalog.at >= 5 * 60 * 1000) {
+                    try {
+                        const found = await discoverModels(snapshot);
+                        catalog = { at: dependencies.now(), models: found.models };
+                    }
+                    catch {
+                        // Keep each provider failure isolated; retain previously verified efforts.
+                        catalog = { at: dependencies.now() };
+                    }
+                    scanCache.set(connection, catalog);
+                    if (scanCache.size > 100)
+                        scanCache.delete(scanCache.keys().next().value);
+                }
+                const current = store.read().find((model) => model.name === snapshot.name);
+                if (!current || scanSignature(current) !== signature)
+                    continue;
+                const externalId = (current.externalModelName || current.name).replace(/^models\//, '');
+                const found = catalog.models?.find((model) => model.id === externalId || model.id === current.externalModelName);
+                const efforts = found?.reasoningEfforts;
+                const status = !catalog.models ? 'error' : efforts === undefined ? 'unknown' : 'known';
+                const updated = { ...(0, modelStore_1.redactModel)(current), reasoningScanStatus: status };
+                if (catalog.models) {
+                    // A successful scan with no allowlist must not keep claiming old effort choices.
+                    updated.reasoningEfforts = efforts;
+                    if (found?.supportsThinking !== undefined)
+                        updated.supportsThinking = found.supportsThinking;
+                }
+                const before = JSON.stringify(store.read());
+                store.save(updated, true);
+                if (JSON.stringify(store.read()) !== before)
+                    changed++;
+            }
+            return { success: true, changed };
+        };
+        scanning = run();
+        try {
+            return await scanning;
+        }
+        finally {
+            scanning = undefined;
+        }
+    }
     async function gatewayModels(input) {
         const connection = resolveGateway(input);
         const response = await requestJson(`${connection.url}/models`, { Authorization: `Bearer ${connection.token}` });
@@ -641,7 +643,10 @@ function createModelManager(directory, codec, openExternal, overrides = {}) {
         saveModel,
         presets: () => providers_1.PROVIDERS,
         discoverModels,
-        createEffortVariants(name) {
+        scanSavedModelReasoning,
+        createEffortVariants(name, allLevels = false) {
+            if (!name || typeof name !== 'string')
+                return scanSavedModelReasoning();
             const source = store.list().find((model) => model.name === name);
             if (!source)
                 throw new Error('Original model no longer exists');
@@ -649,7 +654,16 @@ function createModelManager(directory, codec, openExternal, overrides = {}) {
                 throw new Error('This model is configured without reasoning support');
             const names = new Set(store.list().map((model) => model.name));
             const format = (0, providers_1.resolveApiFormat)(source.provider, source.apiFormat);
-            const copies = ['low', 'medium', 'high'].map((effort, index) => {
+            const declared = Array.isArray(source.reasoningEfforts) && source.reasoningEfforts.length
+                ? source.reasoningEfforts.filter((e) => e !== 'none')
+                : undefined;
+            const fallbackEfforts = allLevels
+                ? ['low', 'medium', 'high', 'xhigh', 'max']
+                : ['low', 'medium', 'high'];
+            const efforts = declared || fallbackEfforts;
+            const baseDisplayName = (source.displayName || source.externalModelName || source.name)
+                .replace(/\s*\((?:low|medium|high|xhigh|max)(?:\s+thinking)?\)$/i, '').trim();
+            const copies = efforts.map((effort, index) => {
                 let target = `${name}-${effort}`;
                 let suffix = 2;
                 while (names.has(target))
@@ -659,11 +673,19 @@ function createModelManager(directory, codec, openExternal, overrides = {}) {
                     ...source,
                     name: target,
                     copyFrom: name,
-                    displayName: `${source.displayName || source.externalModelName || source.name} (${effort})`,
+                    effortVariantOf: name,
+                    displayName: `${baseDisplayName} (${effort})`,
                     reasoningEffort: effort,
                 };
                 if (format !== 'openai') {
-                    const budget = [1024, 4096, 8192][index];
+                    const budgets = {
+                        low: 1024,
+                        medium: 4096,
+                        high: 8192,
+                        xhigh: 16384,
+                        max: 32768,
+                    };
+                    const budget = budgets[effort] ?? 4096;
                     copy.thinkingBudget = budget;
                     copy.maxOutputTokens = Math.max(Number(source.maxOutputTokens) || 16384, budget + 1024);
                     if (source.contextWindow && Number(source.contextWindow) <= Number(copy.maxOutputTokens))
